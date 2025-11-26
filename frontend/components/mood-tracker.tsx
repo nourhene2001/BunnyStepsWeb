@@ -1,79 +1,331 @@
+// mood-tracker.tsx (modified with API calls for shopping items; assuming it's the finance tracker content)
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { CalendarIcon, Camera, AlertTriangle } from "lucide-react"
+import { format } from "date-fns"
 
-interface MoodEntry {
-  emoji: string
-  label: string
-  value: number
+interface Salary {
+  amount: number
+  receivedDate: string
+  notes?: string
+  divisions?: { category: string; amount: number }[]
 }
 
-const moods: MoodEntry[] = [
-  { emoji: "😢", label: "Overwhelmed", value: 1 },
-  { emoji: "😕", label: "Stressed", value: 2 },
-  { emoji: "😐", label: "Neutral", value: 3 },
-  { emoji: "🙂", label: "Good", value: 4 },
-  { emoji: "😄", label: "Excellent", value: 5 },
-]
+interface ShoppingItem {
+  id: number
+  name: string
+  cost: number
+  expirationDate?: string
+  aboutToExpire?: boolean
+  photo?: string
+  priority?: "low" | "medium" | "high"
+  type: "needed" | "impulsive"
+  dateWanted?: string
+}
 
-export default function MoodTracker() {
-  const [selectedMood, setSelectedMood] = useState<number | null>(null)
-  const [moodHistory, setMoodHistory] = useState<{ timestamp: string; value: number }[]>([])
+export default function SmartShoppingManager() {
+  const [salary, setSalary] = useState<Salary | null>(null)
+  const [shoppingList, setShoppingList] = useState<ShoppingItem[]>([])
+  const [itemName, setItemName] = useState("")
+  const [itemCost, setItemCost] = useState("")
+  const [itemExpiration, setItemExpiration] = useState("")
+  const [itemType, setItemType] = useState<"needed" | "impulsive">("needed")
+  const [itemPriority, setItemPriority] = useState<"low" | "medium" | "high">("medium")
+  const [itemPhoto, setItemPhoto] = useState<string>("")
+  const [itemDateWanted, setItemDateWanted] = useState("")
 
-  const handleMoodSelect = (value: number) => {
-    setSelectedMood(value)
-    setMoodHistory([...moodHistory, { timestamp: new Date().toLocaleTimeString(), value }])
+  const getToken = () => localStorage.getItem("access_token")
+
+  const fetchShoppingItems = async () => {
+    const token = getToken()
+    if (!token) return
+    const res = await fetch("/api/shopping-items/", {
+      headers: {
+        "Authorization": `Bearer ${token}`,
+      },
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setShoppingList(data.map((d: any) => ({
+        id: d.id,
+        name: d.name,
+        cost: d.estimated_cost,
+        expirationDate: d.expiry_date,
+        aboutToExpire: d.about_to_expire || false,
+        photo: d.photo || "",
+        priority: d.priority || "medium",
+        type: d.type || "needed",
+        dateWanted: d.date_wanted,
+      })))
+    }
   }
 
-  const averageMood =
-    moodHistory.length > 0 ? (moodHistory.reduce((sum, m) => sum + m.value, 0) / moodHistory.length).toFixed(1) : "N/A"
+  useEffect(() => {
+    fetchShoppingItems()
+  }, [])
+
+  // --- Salary setup ---
+  const handleSalarySubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!salary) {
+      setSalary({
+        amount: parseFloat((document.getElementById("salary-amount") as HTMLInputElement).value),
+        receivedDate: (document.getElementById("salary-date") as HTMLInputElement).value,
+        notes: (document.getElementById("salary-notes") as HTMLTextAreaElement).value || undefined,
+      })
+    } else {
+      alert("Salary already added for this cycle. You can edit later.")
+    }
+  }
+
+  // --- Add new item ---
+  const handleAddItem = async () => {
+    if (!itemName || !itemCost) return alert("Please add item name and cost!")
+
+    const token = getToken()
+    if (!token) return
+
+    const payload: any = {
+      name: itemName,
+      estimated_cost: parseFloat(itemCost),
+      expiry_date: itemExpiration || undefined,
+      priority: itemPriority,
+      type: itemType,
+      date_wanted: itemDateWanted || undefined,
+      // photo omitted for simplicity; assume API handles URL if needed
+    }
+
+    const res = await fetch("/api/shopping-items/", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    })
+
+    if (res.ok) {
+      fetchShoppingItems()
+      setItemName("")
+      setItemCost("")
+      setItemExpiration("")
+      setItemPhoto("")
+      setItemDateWanted("")
+    }
+  }
+
+  // --- Mark as about to expire ---
+  const markAboutToExpire = async (index: number) => {
+    const item = shoppingList[index]
+    const newValue = !item.aboutToExpire
+
+    const token = getToken()
+    if (!token) return
+
+    const res = await fetch(`/api/shopping-items/${item.id}/`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${token}`,
+      },
+      body: JSON.stringify({ about_to_expire: newValue }),
+    })
+
+    if (res.ok) {
+      setShoppingList((prev) =>
+        prev.map((it, i) =>
+          i === index ? { ...it, aboutToExpire: newValue } : it
+        )
+      )
+    }
+  }
+
+  // --- Photo upload simulation ---
+  const handlePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (file) {
+      const reader = new FileReader()
+      reader.onload = () => {
+        setItemPhoto(reader.result as string)
+      }
+      reader.readAsDataURL(file)
+    }
+  }
+
+  // --- Budget warning system ---
+  const totalCost = shoppingList.reduce((sum, i) => sum + i.cost, 0)
+  const overBudget = salary && totalCost > salary.amount
+
+  const autoGeneratedList = shoppingList.filter(
+    (i) =>
+      (i.expirationDate && new Date(i.expirationDate) < new Date()) ||
+      i.aboutToExpire
+  )
 
   return (
-    <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-secondary/10">
+    <Card className="bg-white/70 dark:bg-slate-800/60 backdrop-blur border-accent/10 shadow-md">
       <CardHeader>
-        <CardTitle>How are you feeling?</CardTitle>
+        <CardTitle className="text-lg font-semibold text-primary">
+          🛍️ Smart Shopping & Budget Assistant
+        </CardTitle>
       </CardHeader>
+
       <CardContent className="space-y-6">
-        <div className="flex justify-between gap-2 mb-6">
-          {moods.map((mood) => (
-            <Button
-              key={mood.value}
-              onClick={() => handleMoodSelect(mood.value)}
-              variant={selectedMood === mood.value ? "default" : "outline"}
-              className="flex flex-col items-center p-4 h-auto"
-            >
-              <span className="text-4xl mb-2">{mood.emoji}</span>
-              <span className="text-xs text-center">{mood.label}</span>
-            </Button>
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-4 bg-gradient-to-br from-primary/10 to-primary/5 rounded-lg border border-primary/20">
-            <p className="text-sm text-muted-foreground mb-1">Today's Average</p>
-            <p className="text-3xl font-bold text-primary">{averageMood}</p>
-          </div>
-          <div className="p-4 bg-gradient-to-br from-accent/10 to-accent/5 rounded-lg border border-accent/20">
-            <p className="text-sm text-muted-foreground mb-1">Check-ins</p>
-            <p className="text-3xl font-bold text-accent">{moodHistory.length}</p>
-          </div>
-        </div>
-
-        {moodHistory.length > 0 && (
-          <div className="pt-4 border-t border-border">
-            <h4 className="font-semibold text-sm mb-3">Today's Check-ins</h4>
-            <div className="space-y-2 max-h-48 overflow-y-auto">
-              {[...moodHistory].reverse().map((entry, idx) => (
-                <div key={idx} className="flex items-center justify-between p-2 bg-background/50 rounded">
-                  <span className="text-xs text-muted-foreground">{entry.timestamp}</span>
-                  <span className="text-lg">{moods[entry.value - 1]?.emoji}</span>
-                </div>
-              ))}
+        {/* Salary Section */}
+        <section className="p-4 border rounded-lg bg-background/60">
+          <h3 className="font-semibold mb-3">💰 Add Monthly Salary</h3>
+          {!salary ? (
+            <form onSubmit={handleSalarySubmit} className="space-y-3">
+              <Input id="salary-amount" type="number" placeholder="Salary amount (e.g. 2000)" required />
+              <div className="flex items-center gap-2">
+                <CalendarIcon size={16} />
+                <Input id="salary-date" type="date" required />
+              </div>
+              <Textarea id="salary-notes" placeholder="Notes or divisions (e.g. food: 500, bills: 700...)" />
+              <Button type="submit">Save Salary</Button>
+            </form>
+          ) : (
+            <div className="text-sm text-muted-foreground">
+              <p>
+                💵 Salary: <strong>{salary.amount} DT</strong> received on{" "}
+                {format(new Date(salary.receivedDate), "PPP")}
+              </p>
+              {salary.notes && <p className="italic">💭 {salary.notes}</p>}
             </div>
+          )}
+        </section>
+
+        {/* Warning */}
+        {overBudget && (
+          <div className="p-3 rounded-md bg-red-100 border border-red-300 text-red-700 flex items-center gap-2">
+            <AlertTriangle size={18} /> You are exceeding your salary limit! Be cautious with spending ⚠️
           </div>
         )}
+
+        {/* Add Shopping Item */}
+        <section className="p-4 border rounded-lg bg-background/60 space-y-3">
+          <h3 className="font-semibold mb-3">🧾 Add Item</h3>
+          <Input value={itemName} onChange={(e) => setItemName(e.target.value)} placeholder="Item name" />
+          <Input
+            type="number"
+            value={itemCost}
+            onChange={(e) => setItemCost(e.target.value)}
+            placeholder="Item cost"
+          />
+          <Input
+            type="date"
+            value={itemExpiration}
+            onChange={(e) => setItemExpiration(e.target.value)}
+            placeholder="Expiration date (optional)"
+          />
+          <div className="flex flex-wrap gap-3">
+            <label className="text-sm">Priority:</label>
+            {["low", "medium", "high"].map((p) => (
+              <Button
+                key={p}
+                variant={itemPriority === p ? "default" : "outline"}
+                onClick={() => setItemPriority(p as "low" | "medium" | "high")}
+              >
+                {p}
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <label className="text-sm">Type:</label>
+            {["needed", "impulsive"].map((t) => (
+              <Button
+                key={t}
+                variant={itemType === t ? "default" : "outline"}
+                onClick={() => setItemType(t as "needed" | "impulsive")}
+              >
+                {t}
+              </Button>
+            ))}
+          </div>
+
+          {itemType === "impulsive" && (
+            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+              <CalendarIcon size={16} />
+              <Input
+                type="text"
+                placeholder="When do you want it? (this week, next month...)"
+                value={itemDateWanted}
+                onChange={(e) => setItemDateWanted(e.target.value)}
+              />
+            </div>
+          )}
+
+          <div className="flex items-center gap-3">
+            <label htmlFor="photo-upload" className="cursor-pointer flex items-center gap-2 text-blue-600">
+              <Camera size={18} /> Upload Photo
+            </label>
+            <input id="photo-upload" type="file" accept="image/*" className="hidden" onChange={handlePhotoUpload} />
+          </div>
+
+          <Button onClick={handleAddItem}>Add Item</Button>
+        </section>
+
+        {/* Lists Display */}
+        <section className="space-y-6">
+          <div>
+            <h3 className="font-semibold text-primary mb-2">🧾 Current Shopping List</h3>
+            {shoppingList.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No items yet.</p>
+            ) : (
+              <div className="space-y-3 max-h-64 overflow-y-auto pr-1">
+                {shoppingList.map((item, idx) => (
+                  <div key={idx} className="p-3 border rounded-md bg-background/70 flex flex-col gap-1">
+                    <div className="flex justify-between items-center">
+                      <strong>{item.name}</strong>
+                      <span className="text-xs text-muted-foreground">{item.type}</span>
+                    </div>
+                    <p className="text-sm">💰 {item.cost} DT</p>
+                    {item.expirationDate && (
+                      <p className="text-xs text-muted-foreground">
+                        🗓️ Exp: {format(new Date(item.expirationDate), "PPP")}
+                      </p>
+                    )}
+                    {item.photo && (
+                      <img
+                        src={item.photo}
+                        alt={item.name}
+                        className="w-24 h-24 rounded-md object-cover mt-1"
+                      />
+                    )}
+                    <Button
+                      size="sm"
+                      variant={item.aboutToExpire ? "default" : "outline"}
+                      onClick={() => markAboutToExpire(idx)}
+                      className="mt-2"
+                    >
+                      {item.aboutToExpire ? "Unmark Expiring" : "Mark About to End"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Auto-generated List */}
+          {autoGeneratedList.length > 0 && (
+            <div>
+              <h3 className="font-semibold text-accent mb-2">🕒 Auto Shopping List (Expired / Low)</h3>
+              <ul className="space-y-2 text-sm">
+                {autoGeneratedList.map((item, idx) => (
+                  <li key={idx} className="border rounded-md p-2 bg-background/70">
+                    {item.name} — {item.cost} DT
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
       </CardContent>
     </Card>
   )
