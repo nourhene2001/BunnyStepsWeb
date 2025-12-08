@@ -6,10 +6,14 @@ from .models import (
 
 
 # ---------- Basic Serializers ----------
+# serializers.py
+from rest_framework import serializers
+from .models import Task, Category, ShoppingItem
+
 class CategorySerializer(serializers.ModelSerializer):
     class Meta:
         model = Category
-        fields = "__all__"
+        fields = ["id", "name", "color"]
 
 
 class TaskSerializer(serializers.ModelSerializer):
@@ -35,13 +39,17 @@ class FocusSessionSerializer(serializers.ModelSerializer):
         model = FocusSession
         fields = "__all__"
         read_only_fields = ("user", "started_at", "effective_minutes")
-
+class StartFocusSessionSerializer(serializers.Serializer):
+    mode = serializers.CharField()
+    task_ids = serializers.ListField(
+        child=serializers.IntegerField(), required=False
+    )
 
 class HobbySerializer(serializers.ModelSerializer):
     class Meta:
         model = Hobby
         fields = "__all__"
-
+        read_only_fields = ("user",)  # Add this line
 
 class HobbyActivitySerializer(serializers.ModelSerializer):
     hobby_name = serializers.CharField(source="hobby.name", read_only=True)

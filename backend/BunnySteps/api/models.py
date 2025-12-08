@@ -74,34 +74,27 @@ class Task(models.Model):
     due_date = models.DateTimeField(null=True, blank=True)
     # free-text recurrence (e.g., "every Mon,Wed" or iCal rule if desired)
     recurrence_rule = models.CharField(max_length=500, blank=True, help_text="Human or iCal recurrence text")
-    # allow arbitrary extra fields depending on category (e.g. client, location)
+    # allow arbitrary custom fields per task (JSON)
     custom_fields = models.JSONField(default=dict, blank=True)
+    # image attachment
+    image = models.ImageField(upload_to="task_images/", null=True, blank=True)
+    # voice note attachment
+    voice_note = models.FileField(upload_to="task_voices/", null=True, blank=True)
+    frozen = models.BooleanField(default=False)  # Added for freeze/unfreeze
+    preferred_focus_mode = models.CharField(max_length=20, choices=FOCUS_MODE_PRESET, blank=True)  # Added for focus type
+    shopping_item = models.ForeignKey('ShoppingItem', null=True, blank=True, on_delete=models.SET_NULL, related_name="tasks")  # Added link to shopping
+    hobby = models.ForeignKey('Hobby', null=True, blank=True, on_delete=models.SET_NULL, related_name="tasks")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
-
-    # Media attachments
-    image = models.ImageField(upload_to="task_images/", null=True, blank=True)
-    voice_note = models.FileField(upload_to="task_voice/", null=True, blank=True)
-
-    # flags
-    frozen = models.BooleanField(default=False, help_text="Frozen (paused) till further notice")
-    freeze_reason = models.TextField(blank=True)
-    archived = models.BooleanField(default=False)
-
-    # soft ordering and grouping
-    order = models.IntegerField(default=0)
-
-    class Meta:
-        ordering = ["-priority", "order", "-created_at"]
-
-    def mark_done(self):
-        self.status = "done"
-        self.completed_at = timezone.now()
-        self.save()
-
+    completed = models.BooleanField(default=False)
     def __str__(self):
-        return f"{self.title} ({self.user})"
+        return self.title
+
+    def save(self, *args, **kwargs):
+        if self.completed and not self.completed_at:
+            self.completed_at = timezone.now()
+        super().save(*args, **kwargs)
 
 
 # ---------- Focus Mode (user-defined / presets) ----------
@@ -184,10 +177,8 @@ class Hobby(models.Model):
     """
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="hobbies")
     name = models.CharField(max_length=120)
-    icon = models.CharField(max_length=10, blank=True)
-    schema = models.JSONField(default=dict, blank=True, help_text="Field definitions used for HobbyActivity.custom_data")
-    created_at = models.DateTimeField(auto_now_add=True)
-
+    #schema = models.JSONField(default=dict, blank=True, help_text="Field definitions used for HobbyActivity.custom_data")
+    description = models.CharField(max_length=300)
     def __str__(self):
         return f"{self.name} ({self.user})"
 
@@ -255,6 +246,26 @@ class MoodLog(models.Model):
 
 
 # ---------- Shopping, expiration detection, and money tracking ----------
+class Category_items(models.Model):
+    """
+    Task categories. App ships with seed categories (Chores, School, Work, Hobby, SmallBusiness, etc.)
+    Users can also create their own categories. `extra_schema` stores optional custom fields
+    that apply to tasks of this category (e.g. 'client', 'project', 'difficulty').
+    """
+    user = models.ForeignKey(User, null=True, blank=True, on_delete=models.CASCADE,
+                             help_text="Null = global/predefined category")
+    name = models.CharField(max_length=100)
+    color = models.CharField(max_length=20, blank=True, help_text="Optional color name or hex")
+    extra_schema = models.JSONField(default=dict, blank=True,
+                                    help_text="JSON schema or sample fields for tasks in this category")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "name")
+
+    def __str__(self):
+        return f"{self.name}" if not self.user else f"{self.name} ({self.user})"
+    
 class ShoppingItem(models.Model):
     """
     Items user adds to shopping list. If user takes a picture (e.g., about to expire),
@@ -270,8 +281,24 @@ class ShoppingItem(models.Model):
     estimated_cost = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
     purchased = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
-
-
+    category = models.ForeignKey(Category, null=True, on_delete=models.SET_NULL, related_name="shoppingItems")
+    ITEM_TYPES = [
+        ('needed', 'Needed'),
+        ('impulsive', 'Impulsive'),
+    ]
+    item_type = models.CharField(max_length=10, choices=ITEM_TYPES, default='needed')
+    PRIORITY_CHOICES = [
+        ('low', 'Low'),
+        ('medium', 'Medium'),
+        ('high', 'High'),
+        ('urgent', 'Urgent'),
+    ]
+    
+    priority = models.CharField(
+        max_length=10,
+        choices=PRIORITY_CHOICES,
+        default='medium'
+    )
 class Expense(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="expenses")
     shopping_item = models.ForeignKey(ShoppingItem, null=True, blank=True, on_delete=models.SET_NULL,
@@ -285,9 +312,10 @@ class Expense(models.Model):
 
 
 # ---------- Rewards / Badges ----------
+# ---------- Badge (achievements) ----------
 class Badge(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="badges")
-    key = models.CharField(max_length=120)
+    key = models.CharField(max_length=120, unique=True)  # e.g. "daily_3_tasks"
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     earned_at = models.DateTimeField(auto_now_add=True)
@@ -295,11 +323,128 @@ class Badge(models.Model):
     class Meta:
         unique_together = ("user", "key")
 
-
 # ---------- Simple Reward summary (cached) ----------
+# ---------- Reward Summary (one per user) ----------
 class RewardSummary(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name="reward_summary")
     xp = models.IntegerField(default=0)
     coins = models.IntegerField(default=0)
     level = models.IntegerField(default=1)
     updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} - Level {self.level}"
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from datetime import timedelta
+
+# Level up logic
+def level_up(summary: RewardSummary):
+    required_xp = summary.level * 1000
+    if summary.xp >= required_xp:
+        summary.level += 1
+        summary.xp *= 2                # Double XP
+        summary.coins *= 2             # Double coins
+        summary.coins += summary.level * 100  # Bonus!
+        summary.save(update_fields=['level', 'xp', 'coins'])
+
+# Connect signals — THIS IS USUALLY MISSING!
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=FocusSession)
+def award_focus_rewards(sender, instance, created, **kwargs):
+    if instance.ended_at and instance.effective_minutes:
+        summary, _ = RewardSummary.objects.get_or_create(user=instance.user)
+        minutes = instance.effective_minutes or 0
+        summary.xp += minutes
+        summary.coins += minutes // 10
+        level_up(summary)
+        summary.save()
+
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+from django.utils import timezone
+
+@receiver(post_save, sender=Task)
+def award_task_rewards(sender, instance, **kwargs):
+    # Only trigger when status changes to 'done'
+    if instance.status == "done" and instance.completed_at:
+        # Prevent double-awarding if save() is called multiple times
+        if instance._state.adding:  # new object
+            return
+        try:
+            old = Task.objects.only('status').get(pk=instance.pk)
+            if old.status == "done":  # already done → skip
+                return
+        except Task.DoesNotExist:
+            pass
+
+        summary, _ = RewardSummary.objects.get_or_create(user=instance.user)
+        summary.xp += 50
+        summary.coins += 10
+        level_up(summary)
+        summary.save()
+
+        # Daily achievements
+        today = timezone.now().date()
+        completed_today = Task.objects.filter(
+            user=instance.user,
+            status="done",
+            completed_at__date=today
+        ).count()
+
+        if completed_today >= 3:
+            Badge.objects.get_or_create(
+                user=instance.user,
+                key="daily_3_tasks",
+                defaults={"title": "Task Master", "description": "Completed 3 tasks in one day"}
+            )
+        elif completed_today >= 2:
+            Badge.objects.get_or_create(
+                user=instance.user,
+                key="daily_2_tasks",
+                defaults={"title": "Productive Bunny", "description": "Completed 2 tasks today"}
+            )
+
+
+# Weekly no-impulsive bonus
+# models.py — fix the function
+from django.utils import timezone
+from datetime import timedelta
+
+def check_weekly_discipline(user):
+    # Only check once per day max
+    today = timezone.now().date()
+    cache_key = f"weekly_discipline_checked_{user.id}_{today}"
+    
+    # Simple in-memory cache using user object (works because profile view is per user)
+    if hasattr(user, '_discipline_checked_today'):
+        return
+    
+    week_ago = timezone.now() - timedelta(days=7)
+    
+    has_impulsive_buy = Expense.objects.filter(
+        user=user,
+        spent_at__gte=week_ago,
+        shopping_item__isnull=False,
+        shopping_item__item_type='impulsive'
+    ).exists()
+
+    if not has_impulsive_buy:
+        summary, _ = RewardSummary.objects.get_or_create(user=user)
+        if not Badge.objects.filter(user=user, key="no_impulsive_week", earned_at__date=today).exists():
+            summary.coins += 100
+            summary.save()
+            
+            Badge.objects.get_or_create(
+                user=user,
+                key="no_impulsive_week",
+                defaults={
+                    "title": "Discipline Bunny",
+                    "description": "No impulsive buys for 7 days!"
+                }
+            )
+    
+    # Mark as checked today
+    user._discipline_checked_today = True

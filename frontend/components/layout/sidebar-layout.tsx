@@ -13,8 +13,9 @@ const navItems = [
   { icon: CheckSquare, label: "Tasks", href: "/tasks" },
   { icon: Zap, label: "Focus", href: "/focus" },
   { icon: Heart, label: "Mood", href: "/mood" },
-  { icon: BarChart3, label: "Progress", href: "/progress" },
   { icon: MessageSquare, label: "Chat", href: "/chat" },
+  { icon: MessageSquare, label: "Hobby", href: "/hobby" },
+  { icon: MessageSquare, label: "Shopping", href: "/money" },
 ]
 
 interface SidebarLayoutProps {

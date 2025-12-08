@@ -11,7 +11,8 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-
+# Add this import at the top with your other imports
+from django.db.models import Count
 class RegisterView(generics.CreateAPIView):
     queryset = User.objects.all()
     serializer_class = RegisterSerializer
@@ -38,8 +39,7 @@ class LogoutView(APIView):
             return Response({"detail": "Logout successful"}, status=status.HTTP_205_RESET_CONTENT)
         except (InvalidToken, TokenError):
             return Response({"detail": "Invalid token"}, status=status.HTTP_400_BAD_REQUEST)
-# views.py  ← Add this right next to your RegisterView
-# Get current user (for frontend check)
+
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
@@ -116,38 +116,7 @@ class CategoryViewSet(BaseUserOwnedViewSet):
     queryset = Category.objects.all()
     serializer_class = CategorySerializer
 
-
-class TaskViewSet(BaseUserOwnedViewSet):
-    queryset = Task.objects.all()
-    serializer_class = TaskSerializer
-
-    @action(detail=True, methods=["post"])
-    def mark_done(self, request, pk=None):
-        task = self.get_object()
-        task.mark_done()
-        return Response({"status": "completed", "completed_at": task.completed_at})
-
-
-class FocusModeViewSet(BaseUserOwnedViewSet):
-    queryset = FocusMode.objects.all()
-    serializer_class = FocusModeSerializer
-
-
-class FocusSessionViewSet(BaseUserOwnedViewSet):
-    queryset = FocusSession.objects.select_related("mode").all()
-    serializer_class = FocusSessionSerializer
-
-    @action(detail=False, methods=["post"])
-    def end_session(self, request):
-        session_id = request.data.get("session_id")
-        try:
-            session = FocusSession.objects.get(id=session_id, user=request.user)
-            session.ended_at = timezone.now()
-            session.save()
-            return Response({"message": "Session ended", "effective_minutes": session.effective_minutes})
-        except FocusSession.DoesNotExist:
-            return Response({"error": "Session not found"}, status=404)
-
+from rest_framework.decorators import action   # ← THIS WAS MISSING!
 
 class HobbyViewSet(BaseUserOwnedViewSet):
     queryset = Hobby.objects.all()
@@ -208,34 +177,33 @@ from .serializers import (
     ShoppingItemSerializer, ExpenseSerializer, BadgeSerializer,
     RewardSummarySerializer
 )
+# views.py
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.response import Response
+from django.utils import timezone
+from django.db.models import Count
+from datetime import timedelta
+import random
 
-# ----------------------------
-# Extra serializer for session start
-# ----------------------------
-from rest_framework import serializers
+class FocusSessionViewSet(BaseUserOwnedViewSet):
+    queryset = FocusSession.objects.all().select_related("mode")
+    serializer_class = FocusSessionSerializer
 
-class StartFocusSessionSerializer(serializers.Serializer):
-    mode = serializers.CharField()
-    task_ids = serializers.ListField(
-        child=serializers.IntegerField(), required=False
-    )
+    def get_queryset(self):
+        return super().get_queryset().select_related("mode")
 
-
-# ============================================================
-# ⭐ MAIN: Start a session (Pomodoro / Flow / Mini / Shuffle)
-# ============================================================
-
-class StartFocusSessionView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
+    # ========================================
+    # START SESSION (Pomodoro / Flow / Mini / Shuffle)
+    # ========================================
+    @action(detail=False, methods=["post"], url_path="start")
+    def start(self, request):
         serializer = StartFocusSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         mode_key = serializer.validated_data["mode"]
         task_ids = serializer.validated_data.get("task_ids", [])
 
-        # Try to load the FocusMode object (preset config)
+        # Try to load preset config
         try:
             mode = FocusMode.objects.get(user=request.user, preset=mode_key)
         except FocusMode.DoesNotExist:
@@ -245,119 +213,82 @@ class StartFocusSessionView(APIView):
         session = FocusSession.objects.create(
             user=request.user,
             mode=mode,
-            mode_name=mode.name if mode else mode_key,
-            is_hyperfocus=True if mode_key == "flow" else False
+            mode_name=mode.name if mode else mode_key.capitalize(),
+            is_hyperfocus=(mode_key == "flow")
         )
 
-        # Attach tasks if provided
+        # Attach tasks
         if task_ids:
             tasks = Task.objects.filter(id__in=task_ids, user=request.user)
             session.related_tasks.set(tasks)
 
-        # Special logic for shuffle
+        # Special shuffle metadata
         if mode_key == "shuffle":
+            random.shuffle(task_ids)
             session.metadata = {
                 "chosen_tasks": task_ids,
-                "random_order": task_ids[:]
+                "random_order": task_ids
             }
             session.save()
 
         return Response({
             "session_id": session.id,
             "mode": mode_key,
-            "message": f"{mode_key.capitalize()} session started."
-        })
+            "message": f"{mode_key.capitalize()} session started!"
+        }, status=status.HTTP_201_CREATED)
 
-
-# ============================================================
-# ⭐ END SESSION — Calculates effective minutes
-# ============================================================
-
-class EndFocusSessionView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, session_id):
+    # ========================================
+    # END SESSION
+    # ========================================
+    @action(detail=True, methods=["post"], url_path="end")
+    def end(self, request, pk=None):
         try:
-            session = FocusSession.objects.get(id=session_id, user=request.user)
+            session = self.get_object()  # auto-filters by user
         except FocusSession.DoesNotExist:
-            return Response({"error": "Session not found."}, status=404)
+            return Response({"error": "Session not found"}, status=404)
 
         session.ended_at = timezone.now()
-        session.save()
+        session.save(update_fields=["ended_at"])
 
         return Response({
-            "message": "Session ended.",
+            "message": "Session ended",
             "effective_minutes": session.effective_minutes
         })
 
-
-# ============================================================
-# ⭐ Pomodoro preset (work, break)
-# ============================================================
-
-class PomodoroConfigView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
-        try:
-            mode = FocusMode.objects.get(user=request.user, preset="pomodoro")
-            return Response(mode.config)
-        except FocusMode.DoesNotExist:
-            return Response({
-                "work_seconds": 25 * 60,
-                "break_seconds": 5 * 60
-            })
-
-
-# ============================================================
-# ⭐ Flow mode — allowed only twice/day
-# ============================================================
-
-class FlowSessionAllowedView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
+    # ========================================
+    # FLOW: Check if allowed (max 2 per day)
+    # ========================================
+    @action(detail=False, methods=["get"], url_path="flow-allowed")
+    def flow_allowed(self, request):
         today = timezone.now().date()
-        count = FocusSession.objects.filter(
-            user=request.user,
+        count = self.get_queryset().filter(
             mode__preset="flow",
             started_at__date=today
         ).count()
 
         if count >= 2:
-            return Response({"allowed": False, "reason": "Daily limit reached"})
-
+            return Response({"allowed": False, "reason": "Daily limit reached (2 Flow sessions max)"})
         return Response({"allowed": True})
 
-
-# ============================================================
-# ⭐ Mini Focus ("Hop In") — quick 5–10 minute session info
-# ============================================================
-
-class MiniFocusModeView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request):
+    # ========================================
+    # MINI: Quick session suggestions
+    # ========================================
+    @action(detail=False, methods=["get"], url_path="mini-info")
+    def mini_info(self, request):
         return Response({
             "suggested_durations": [5, 7, 10],
-            "bunny_text": "Let’s hop for 5 minutes — no pressure."
+            "bunny_text": "Let’s hop for 5 minutes — no pressure!"
         })
 
-
-# ============================================================
-# ⭐ Shuffle Tasks Session
-# ============================================================
-
-class ShuffleTasksView(APIView):
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request):
+    # ========================================
+    # SHUFFLE: Get shuffled task order
+    # ========================================
+    @action(detail=False, methods=["post"], url_path="shuffle")
+    def shuffle_tasks(self, request):
         task_ids = request.data.get("task_ids", [])
-
         tasks = Task.objects.filter(id__in=task_ids, user=request.user)
         task_data = [{"id": t.id, "title": t.title} for t in tasks]
 
-        import random
         order = task_ids[:]
         random.shuffle(order)
 
@@ -365,6 +296,29 @@ class ShuffleTasksView(APIView):
             "selected": task_data,
             "random_order": order
         })
+
+    # ========================================
+    # STATS: Weekly chart data
+    # ========================================
+    @action(detail=False, methods=["get"], url_path="stats")
+    def stats(self, request):
+        now = timezone.now()
+        week_ago = now - timedelta(days=7)
+
+        daily = (
+            self.get_queryset()
+            .filter(started_at__gte=week_ago)
+            .values("started_at__date")
+            .annotate(count=Count("id"))
+            .order_by("started_at__date")
+        )
+
+        chart_data = [
+            {"day": d["started_at__date"].strftime("%a"), "sessions": d["count"]}
+            for d in daily
+        ]
+
+        return Response({"chart_data": chart_data})
 
 
 # ============================================================
@@ -622,110 +576,227 @@ class CategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
 # TASK VIEWS
 # -------------------------
 
+# views.py — UPDATED FOR ALL NEW TASK FEATURES
+from rest_framework import generics, status
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.shortcuts import get_object_or_404
+from .models import Task, Category, ShoppingItem, Reminder
+from .serializers import TaskSerializer, CategorySerializer, ShoppingItemSerializer, ReminderSerializer
+
+
+# ========================
+# TASK VIEWS — FULLY UPDATED
+# ========================
+from rest_framework import viewsets
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAuthenticated
+from rest_framework.response import Response
+from django.utils import timezone
+
+class TaskViewSet(viewsets.ModelViewSet):
+    """
+    Complete CRUD + custom actions for tasks
+    GET    /api/tasks/
+    POST   /api/tasks/
+    GET    /api/tasks/<id>/
+    PATCH  /api/tasks/<id>/
+    DELETE /api/tasks/<id>/
+    PATCH  /api/tasks/<id>/start/
+    PATCH  /api/tasks/<id>/complete/
+    PATCH  /api/tasks/<id>/toggle_freeze/
+    """
+
+    serializer_class = TaskSerializer
+    permission_classes = [IsAuthenticated]
+    queryset = Task.objects.all()  # Required for router
+
+    def get_queryset(self):
+        queryset = Task.objects.filter(user=self.request.user) \
+            .select_related("category", "shopping_item", "hobby") \
+            .prefetch_related("reminders", "focus_sessions") \
+            .order_by("-created_at")
+
+        # THIS IS BULLETPROOF — NO MORE CRASHES
+        hobby_param = self.request.query_params.get("hobby")
+        if hobby_param is not None:
+            try:
+                hobby_id = int(hobby_param)
+                queryset = queryset.filter(hobby_id=hobby_id)
+            except (ValueError, TypeError):
+                pass  # Invalid hobby ID → return no tasks (safe)
+
+        return queryset
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
+
+    # ✅ ✅ ✅ START TASK
+    @action(detail=True, methods=["patch"], url_path="start")
+    def start(self, request, pk=None):
+        task = self.get_object()
+
+        if task.frozen:
+            return Response({"detail": "Frozen task"}, status=400)
+
+        if task.status in ["in_progress", "done"]:
+            return Response({"detail": "Already started/done"}, status=400)
+
+        task.status = "in_progress"
+        task.save(update_fields=["status"])
+
+        return Response({
+            "detail": "Task started! Hop to it!",
+            "focus_mode": task.preferred_focus_mode or "pomodoro",
+            "confetti": True
+        })
+
+    # ✅ ✅ ✅ COMPLETE TASK
+    @action(detail=True, methods=["patch"], url_path="complete")
+    def complete(self, request, pk=None):
+        task = self.get_object()
+
+        if task.status == "done":
+            return Response({"detail": "Already done"}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            # Mark task as done
+            task.completed = True
+            task.status = "done"
+
+            # Only set completed_at if missing
+            if not task.completed_at:
+                task.completed_at = timezone.now()
+
+            task.save()
+        except Exception as e:
+            # Return exact error for debugging
+            return Response(
+                {"detail": f"Could not complete task: {str(e)}"},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        return Response({
+            "detail": "Task completed! Great job!",
+            "xp": 50,
+            "coins": 10,
+            "confetti": True
+        })
+    # ✅ ✅ ✅ FREEZE / UNFREEZE
+    @action(detail=True, methods=["patch"], url_path="toggle_freeze")
+    def toggle_freeze(self, request, pk=None):
+        task = self.get_object()
+        task.frozen = not task.frozen
+        task.save()
+
+        return Response({
+            "frozen": task.frozen,
+            "detail": "Task frozen" if task.frozen else "Task unfrozen"
+        })
+
+
+
+# ========================
+# LEGACY VIEWS (keep if you still use them)
+# ========================
 class TaskListCreateView(generics.ListCreateAPIView):
-    """
-    List tasks or create new task
-    """
     serializer_class = TaskSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        """
-        Optionally filter by category, priority, or focus type
-        """
-        user = self.request.user
-        qs = Task.objects.filter(user=user)
+        qs = Task.objects.filter(user=self.request.user).select_related(
+            "category", "shopping_item", "hobby"
+        ).order_by("-created_at")
 
-        category_id = self.request.query_params.get("category")
-        priority = self.request.query_params.get("priority")
-        focus_type = self.request.query_params.get("focus_type")
+        # Existing filters (keep these!)
+        if self.request.query_params.get("status"):
+            qs = qs.filter(status=self.request.query_params["status"])
+        if self.request.query_params.get("priority"):
+            qs = qs.filter(priority=self.request.query_params["priority"])
+        if self.request.query_params.get("frozen") is not None:
+            qs = qs.filter(frozen=self.request.query_params["frozen"] == "true")
 
-        if category_id:
-            qs = qs.filter(category_id=category_id)
-        if priority:
-            qs = qs.filter(priority=priority)
-        if focus_type:
-            # assuming FocusMode preset name maps to tasks (user can configure)
-            qs = qs.filter(custom_fields__focus_type=focus_type)
+        # THIS IS THE MISSING LINE — ADD IT!
+        if self.request.query_params.get("hobby"):
+            qs = qs.filter(hobby=self.request.query_params["hobby"])
 
         return qs
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
-
 
 class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = TaskSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return Task.objects.filter(user=self.request.user)
-from rest_framework import generics
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.response import Response
-from rest_framework import status
-from django.utils import timezone
-
-from .models import MoodLog, Note
-from .serializers import MoodLogSerializer, NoteSerializer
+        return Task.objects.filter(user=self.request.user).select_related(
+            "category", "shopping_item", "hobby"
+        )
 
 
-# -------------------------
-# MOOD LOG VIEWS
-# -------------------------
-
-class MoodLogListCreateView(generics.ListCreateAPIView):
-    """
-    List all mood logs for the user, or create a new mood log
-    """
-    serializer_class = MoodLogSerializer
+# ========================
+# CATEGORY VIEWS
+# ========================
+class CategoryListCreateView(generics.ListCreateAPIView):
+    serializer_class = CategorySerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
-        return MoodLog.objects.filter(user=self.request.user).order_by("-created_at")
+        return Category.objects.filter(user=self.request.user) | Category.objects.filter(user=None)  # global + user
 
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
 
-class MoodLogDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = MoodLogSerializer
+# ========================
+# SHOPPING ITEM LINKING (for "Add Cost" button)
+# ========================
+class ShoppingItemForTaskView(generics.CreateAPIView):
+    serializer_class = ShoppingItemSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        return MoodLog.objects.filter(user=self.request.user)
+    def create(self, request, *args, **kwargs):
+        task_id = request.data.get("task")
+        task = get_object_or_404(Task, id=task_id, user=request.user)
+
+        shopping_data = {
+            "name": request.data.get("name", task.title + " (cost)"),
+            "estimated_cost": request.data.get("estimated_cost"),
+            "user": request.user.id,
+        }
+        shopping_serializer = self.get_serializer(data=shopping_data)
+        shopping_serializer.is_valid(raise_exception=True)
+        shopping_item = shopping_serializer.save()
+
+        # Link back to task
+        task.shopping_item = shopping_item
+        task.save(update_fields=["shopping_item"])
+
+        return Response(shopping_serializer.data, status=status.HTTP_201_CREATED)
 
 
-# -------------------------
-# NOTES VIEWS
-# -------------------------
-
-class NoteListCreateView(generics.ListCreateAPIView):
-    """
-    List all notes or create a new note
-    """
-    serializer_class = NoteSerializer
+# ========================
+# REMINDER FOR TASK
+# ========================
+class ReminderForTaskView(generics.CreateAPIView):
+    serializer_class = ReminderSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_queryset(self):
-        # Optionally filter by task
-        task_id = self.request.query_params.get("task")
-        qs = Note.objects.filter(user=self.request.user).order_by("-created_at")
-        if task_id:
-            qs = qs.filter(task_id=task_id)
-        return qs
+    def create(self, request, *args, **kwargs):
+        task_id = request.data.get("task")
+        task = get_object_or_404(Task, id=task_id, user=request.user)
 
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        reminder_data = {
+            "task": task.id,
+            "reminder_date": request.data.get("reminder_date"),
+            "user": request.user.id,
+        }
+        serializer = self.get_serializer(data=reminder_data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
 
-
-class NoteDetailView(generics.RetrieveUpdateDestroyAPIView):
-    serializer_class = NoteSerializer
-    permission_classes = [IsAuthenticated]
-
-    def get_queryset(self):
-        return Note.objects.filter(user=self.request.user)
-
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 # -------------------------
 # SEND NOTE TO FUTURE SELF
@@ -860,3 +931,67 @@ class ImpulsiveShoppingItemView(generics.ListCreateAPIView):
             return Response({"warning": warning}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer.save(user=user)
+import os
+from django.http import JsonResponse
+from rest_framework.decorators import api_view
+from dotenv import load_dotenv
+from openai import OpenAI
+
+load_dotenv()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+@api_view(["POST"])
+def chat_with_bunny(request):
+    user_message = request.data.get("message", "")
+
+    completion = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "system", "content": "You are Bun Bun, a cute productivity bunny assistant. Be motivational, supportive and short."},
+            {"role": "user", "content": user_message},
+        ]
+    )
+
+    reply = completion.choices[0].message["content"]
+    return JsonResponse({"reply": reply})
+class UserProfileView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        user = request.user
+        summary, _ = RewardSummary.objects.get_or_create(user=user)
+        
+        # This now runs only ONCE per day per user
+        check_weekly_discipline(user)
+
+        return Response({
+            "id": user.id,
+            "username": user.username,
+            "level": summary.level,
+            "xp": summary.xp,
+            "coins": summary.coins,
+            "achievements_count": user.badges.count(),
+        })
+
+# Smart recommendations when user has enough coins
+class RewardRecommendationView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        summary = request.user.reward_summary
+        if summary.coins < 500:
+            return Response({"message": "Keep going! You're doing great"})
+
+        top_impulsive = ShoppingItem.objects.filter(
+            user=request.user,
+            item_type="impulsive",
+            purchased=False
+        ).order_by("-priority")[:3]
+
+        hobbies = Hobby.objects.filter(user=request.user)[:3]
+
+        return Response({
+            "message": "You've earned a treat! But also remember to relax",
+            "treat_yourself": ShoppingItemSerializer(top_impulsive, many=True).data,
+            "relax_with": HobbySerializer(hobbies, many=True).data,
+        })

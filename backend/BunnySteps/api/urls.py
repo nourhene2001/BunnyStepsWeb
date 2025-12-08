@@ -13,19 +13,14 @@ from .views import (
     ExpenseListCreateView,
     ExpiringItemsView,
     ImpulsiveShoppingItemView,
-    MoodLogDetailView,
-    MoodLogListCreateView,
-    NoteDetailView,
-    NoteListCreateView,
+
+    ReminderForTaskView,
+    RewardRecommendationView,
     SendNoteToFutureSelfView,
     ShoppingItemDetailView,
+    ShoppingItemForTaskView,
     ShoppingItemListCreateView,
-    StartFocusSessionView,
-    EndFocusSessionView,
-    PomodoroConfigView,
-    FlowSessionAllowedView,
-    MiniFocusModeView,
-    ShuffleTasksView,
+
     HobbyListCreateView, HobbyDetailView,
     FreezeHobbyView,
     TaskDetailView,
@@ -33,13 +28,13 @@ from .views import (
     HobbyActivityListCreateView, ConvertHobbyActivityToTaskView,
     HobbyNoteListCreateView, NoteDeleteView,
     CheckInactivityRemindersView,
-    UserProfileView)
+    UserProfileView,
+    chat_with_bunny)
 
 router = DefaultRouter()
 router.register("categories", views.CategoryViewSet)
-router.register("tasks", views.TaskViewSet)
-router.register("focus-modes", views.FocusModeViewSet)
-router.register("focus-sessions", views.FocusSessionViewSet)
+router.register("tasks", views.TaskViewSet, basename="tasks")          # basename fixed!
+router.register("focus-sessions", views.FocusSessionViewSet, basename="focus-session")
 router.register("hobbies", views.HobbyViewSet)
 router.register("hobby-activities", views.HobbyActivityViewSet)
 router.register("reminders", views.ReminderViewSet)
@@ -57,16 +52,6 @@ urlpatterns = [
     path('auth/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
 
 
-    path("focus/start/", StartFocusSessionView.as_view()),
-    path("focus/end/<int:session_id>/", EndFocusSessionView.as_view()),
-
-    path("focus/pomodoro/config/", PomodoroConfigView.as_view()),
-    path("focus/flow/allowed/", FlowSessionAllowedView.as_view()),
-    path("focus/mini/info/", MiniFocusModeView.as_view()),
-
-    path("focus/shuffle/", ShuffleTasksView.as_view()),
-
-    path("focus/adaptive/", AdaptiveRecommendationView.as_view()),
 
     # HOBBIES
     path("hobbies/", HobbyListCreateView.as_view()),
@@ -90,16 +75,7 @@ urlpatterns = [
     path("categories/", CategoryListCreateView.as_view(), name="category-list-create"),
     path("categories/<int:pk>/", CategoryDetailView.as_view(), name="category-detail"),
 
-    # Tasks
-    path("tasks/", TaskListCreateView.as_view(), name="task-list-create"),
-    path("tasks/<int:pk>/", TaskDetailView.as_view(), name="task-detail"),
-        # Mood Logs
-    path("moods/", MoodLogListCreateView.as_view(), name="mood-list-create"),
-    path("moods/<int:pk>/", MoodLogDetailView.as_view(), name="mood-detail"),
-
     # Notes
-    path("notes/", NoteListCreateView.as_view(), name="note-list-create"),
-    path("notes/<int:pk>/", NoteDetailView.as_view(), name="note-detail"),
     path("notes/<int:pk>/send_future/", SendNoteToFutureSelfView.as_view(), name="note-send-future"),
         # Shopping Items
     path("shopping/items/", ShoppingItemListCreateView.as_view(), name="shopping-item-list-create"),
@@ -117,6 +93,11 @@ urlpatterns = [
     path('login/', views.LoginView.as_view(), name='login'),
     path('logout/', views.LogoutView.as_view(), name='logout'),
     path("auth/me/", UserProfileView.as_view(), name="user-profile"),
+    path("chat/", chat_with_bunny),
+    path('profile/', UserProfileView.as_view(), name='profile'),
+    path('reward-recommendations/', RewardRecommendationView.as_view(), name='recommendations'),
+    path('expiring-items/', ExpiringItemsView.as_view(), name='expiring-items'),
+    path('reward-recommendations/', RewardRecommendationView.as_view(), name='reward-recommendations'),
 ]
 
 

@@ -1,19 +1,33 @@
+// focus-stats.tsx
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts"
-
-const chartData = [
-  { day: "Mon", sessions: 3 },
-  { day: "Tue", sessions: 5 },
-  { day: "Wed", sessions: 4 },
-  { day: "Thu", sessions: 6 },
-  { day: "Fri", sessions: 7 },
-  { day: "Sat", sessions: 2 },
-  { day: "Sun", sessions: 4 },
-]
+import AuthService from "@/services/authService"
 
 export default function FocusStats() {
+  const [chartData, setChartData] = useState([])
+  const token = AuthService.getAccessToken()
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const res = await fetch(`${API_URL}/focus-sessions/stats/`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+        if (res.ok) {
+          const data = await res.json()
+          setChartData(data.chart_data || [])
+        }
+      } catch (err) {
+        console.error("Failed to load stats", err)
+      }
+    }
+    fetchStats()
+  }, [token])
+
   return (
     <div className="space-y-4">
       <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-primary/10">

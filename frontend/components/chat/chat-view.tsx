@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useRef, useEffect } from "react"
+import axios from "axios"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -14,6 +15,10 @@ interface Message {
   timestamp: Date
 }
 
+interface ChatResponse {
+  reply: string
+}
+
 export default function ChatView() {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -23,6 +28,7 @@ export default function ChatView() {
       timestamp: new Date(),
     },
   ])
+
   const [inputValue, setInputValue] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -35,23 +41,10 @@ export default function ChatView() {
     scrollToBottom()
   }, [messages])
 
-  const bunnyResponses = [
-    "That sounds like a great plan! You've got this!",
-    "I believe in you! Let's break this down into smaller steps.",
-    "Remember to take breaks and be kind to yourself!",
-    "You're doing amazing! Keep up the momentum!",
-    "Let's focus on one task at a time. You can do this!",
-    "I'm here to support you every step of the way!",
-    "Your productivity streak is impressive! Keep it up!",
-    "Don't forget to hydrate and stretch a bit!",
-    "You're making great progress! I'm so proud of you!",
-    "Let's celebrate this win together! You earned it!",
-  ]
-
   const handleSendMessage = async () => {
     if (!inputValue.trim()) return
 
-    // Add user message
+    // User message object
     const userMessage: Message = {
       id: Date.now().toString(),
       text: inputValue,
@@ -59,22 +52,39 @@ export default function ChatView() {
       timestamp: new Date(),
     }
 
+    // Add user message
     setMessages((prev) => [...prev, userMessage])
     setInputValue("")
     setIsLoading(true)
 
-    // Simulate AI response delay
-    setTimeout(() => {
-      const randomResponse = bunnyResponses[Math.floor(Math.random() * bunnyResponses.length)]
+    try {
+      // --- Call your Django backend ---
+      const res = await axios.post<ChatResponse>("http://localhost:8000/api/chat/", {
+        message: userMessage.text,
+      })
+
+      // Bunny reply from AI
       const bunnyMessage: Message = {
         id: (Date.now() + 1).toString(),
-        text: randomResponse,
+        text: res.data.reply,
         sender: "bunny",
         timestamp: new Date(),
       }
+
       setMessages((prev) => [...prev, bunnyMessage])
-      setIsLoading(false)
-    }, 500)
+    } catch (err) {
+      // Error fallback message
+      const errorMessage: Message = {
+        id: "error",
+        text: "Oops! Bun Bun is sleepy... please try again!",
+        sender: "bunny",
+        timestamp: new Date(),
+      }
+
+      setMessages((prev) => [...prev, errorMessage])
+    }
+
+    setIsLoading(false)
   }
 
   return (
@@ -101,6 +111,7 @@ export default function ChatView() {
           {messages.map((message) => (
             <ChatMessage key={message.id} message={message} />
           ))}
+
           {isLoading && (
             <div className="flex gap-2 items-end">
               <span className="text-2xl">😊</span>
@@ -122,6 +133,7 @@ export default function ChatView() {
               </div>
             </div>
           )}
+
           <div ref={messagesEndRef} />
         </CardContent>
 
@@ -132,7 +144,7 @@ export default function ChatView() {
               placeholder="Ask Bun Bun anything..."
               value={inputValue}
               onChange={(e) => setInputValue(e.target.value)}
-              onKeyPress={(e) => e.key === "Enter" && handleSendMessage()}
+              onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
               disabled={isLoading}
               className="bg-background/80"
             />
@@ -152,9 +164,7 @@ export default function ChatView() {
                 key={action}
                 variant="outline"
                 size="sm"
-                onClick={() => {
-                  setInputValue(action)
-                }}
+                onClick={() => setInputValue(action)}
                 className="text-xs"
               >
                 {action}

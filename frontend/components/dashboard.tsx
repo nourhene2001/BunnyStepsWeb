@@ -1,222 +1,299 @@
-// app/dashboard/page.tsx  ← ONE FILE ONLY (final version)
+// app/dashboard/page.tsx
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { motion } from "framer-motion"
-import { Button } from "@/components/ui/button"
-import { Settings, MessageCircle, Home, Notebook, Brain, Heart, Palette, Wallet } from "lucide-react"
+import { useState, useEffect } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Award, Zap, Star, AlertCircle, Bell, Rabbit } from "lucide-react"
+import { format, isToday } from "date-fns"
 import AuthService from "@/services/authService"
-import TaskList from "./task-list"
-import FocusSession from "./focus-session"
-import MoodTracker from "./mood-tracker"
-import HobbyTracker from "./hobby-tracker"
-import ShoppingList from "./money-tracker"
-import BunnyAvatar from "./bunny-avatar"
 
-type View = "dashboard" | "tasks" | "focus" | "mood" | "hobby" | "finance"
+// Types
+interface Task {
+  id: string
+  title: string
+  description?: string
+  priority: "low" | "medium" | "high" | "urgent"
+  due_date?: string
+  completed: boolean
+}
 
-const sidebarItems = [
-  { view: "dashboard" as View, icon: Home, label: "Home", emoji: "Home" },
-  { view: "tasks" as View, icon: Notebook, label: "Organizer", emoji: "Notebook" },
-  { view: "focus" as View, icon: Brain, label: "Lock In", emoji: "Brain" },
-  { view: "mood" as View, icon: Heart, label: "Log Mood", emoji: "Heart" },
-  { view: "hobby" as View, icon: Palette, label: "Hobbies", emoji: "Palette" },
-  { view: "finance" as View, icon: Wallet, label: "Money", emoji: "Wallet" },
-]
+interface ShoppingItem {
+  id: string
+  name: string
+  estimated_cost: number
+  expiry_date?: string
+  priority: "low" | "medium" | "high"
+  note?: string
+}
 
-const focusModes = [
-  { name: "Pomodoro", icon: "Timer" },
-  { name: "Hyperfocus", icon: "Fire" },
-  { name: "Gentle Focus", icon: "Flower" },
-  { name: "Challenge Mode", icon: "Sword" },
-]
+interface Hobby {
+  id: string
+  name: string
+  description?: string
+}
 
-export default function Dashboard() {
-  const router = useRouter()
-  const [currentView, setCurrentView] = useState<View>("dashboard")
-  const [user, setUser] = useState<any>(null)
+interface UserStats {
+  level: number
+  xp: number
+  coins: number
+  achievements_count: number
+}
+
+interface Recommendation {
+  message: string
+  treat_yourself: ShoppingItem[]
+  relax_with: Hobby[]
+}
+
+export default function UltimateDashboard() {
+  const [tasks, setTasks] = useState<Task[]>([])
+  const [expiringItems, setExpiringItems] = useState<ShoppingItem[]>([])
+  const [stats, setStats] = useState<UserStats | null>(null)
+  const [recommendation, setRecommendation] = useState<Recommendation | null>(null)
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const checkAuth = async () => {
-      const currentUser = await AuthService.getCurrentUser()
-      if (!currentUser) {
-        router.replace("/login?redirect=/dashboard")
-        return
+  const token = AuthService.getAccessToken()
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+
+  const fetchData = async () => {
+    if (!token) return
+
+    setLoading(true)
+    try {
+      const [tasksRes, expiringRes, profileRes] = await Promise.all([
+        fetch(`${API_URL}/tasks/`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/expiring-items/`, { headers: { Authorization: `Bearer ${token}` } }),
+        fetch(`${API_URL}/profile/`, { headers: { Authorization: `Bearer ${token}` } }),
+      ])
+
+      const tasksData: Task[] = tasksRes.ok ? await tasksRes.json() : []
+      const expiringData: ShoppingItem[] = expiringRes.ok ? await expiringRes.json() : []
+      const profile = profileRes.ok ? await profileRes.json() : {}
+
+      const userStats: UserStats = {
+        level: profile.level ?? 1,
+        xp: profile.xp ?? 0,
+        coins: profile.coins ?? 0,
+        achievements_count: profile.achievements_count ?? 0,
       }
-      setUser(currentUser)
+
+      setTasks(tasksData)
+      setExpiringItems(expiringData)
+      setStats(userStats)
+
+      // Only fetch recommendations if user has enough coins
+      if (userStats.coins >= 500) {
+        const recRes = await fetch(`${API_URL}/reward-recommendations/`, {
+          headers: { Authorization: `Bearer ${token}` },
+        })
+        if (recRes.ok) {
+          const rec = await recRes.json()
+          setRecommendation(rec)
+        }
+      }
+    } catch (err) {
+      console.error("Failed to load dashboard:", err)
+    } finally {
       setLoading(false)
     }
-    checkAuth()
-  }, [router])
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [token])
+
+  // Derived values
+  const urgentToday = tasks.filter(
+    t => !t.completed &&
+         t.due_date &&
+         isToday(new Date(t.due_date)) &&
+         ["high", "urgent"].includes(t.priority)
+  )
+
+  const nextLevelXP = (stats?.level ?? 1) * 1000
+  const xpProgress = stats ? (stats.xp / nextLevelXP) * 100 : 0
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-50 flex items-center justify-center flex-col gap-8">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          className="text-9xl"
-        >
-          Bunny
-        </motion.div>
-        <p className="text-2xl font-bold text-pink-600 animate-pulse">Hopping you in safely...</p>
+      <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50 flex items-center justify-center">
+        <div className="text-center">
+          <Rabbit className="w-20 h-20 text-pink-600 animate-bounce mx-auto mb-4" />
+          <p className="text-2xl font-bold text-purple-700">Loading your cozy garden...</p>
+        </div>
       </div>
     )
   }
 
-  if (!user) return null
-
-  const stats = { streak: 12, totalCompleted: 89, level: 9, coins: 620 }
-
   return (
-    <div
-      className="relative min-h-screen w-full overflow-hidden p-6 flex flex-col"
-      style={{
-        backgroundImage:
-          "linear-gradient(rgba(255, 245, 255, 0.8), rgba(240, 220, 255, 0.6)), url('/b1.jpg')",
-        backgroundSize: "cover",
-        backgroundPosition: "center",
-      }}
-    >
-      {/* Floating subtle bubbles */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        {[...Array(8)].map((_, i) => (
-          <motion.div
-            key={i}
-            className="absolute bg-pink-200/30 rounded-full blur-2xl"
-            style={{
-              width: `${30 + Math.random() * 50}px`,
-              height: `${30 + Math.random() * 50}px`,
-              top: `${Math.random() * 100}%`,
-              left: `${Math.random() * 100}%`,
-            }}
-            animate={{ y: [0, -20, 0], opacity: [0.3, 0.6, 0.3] }}
-            transition={{
-              duration: 5 + Math.random() * 5,
-              repeat: Infinity,
-              ease: "easeInOut",
-            }}
-          />
-        ))}
-      </div>
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 via-purple-50 to-blue-50">
+      <div className="max-w-7xl mx-auto p-6 space-y-8">
 
-      {/* Top Header: Title + Stats + Bunny */}
-      <div className="relative  flex justify-between items-start mb-6">
-              {/* Title */}
-      <div className="mb-6 z-10 relative">
-        <h1 className="text-4xl md:text-5xl font-extrabold text-foreground mb-1">🌸 BunnySteps</h1>
-        <p className="text-muted-foreground text-sm md:text-base">Your cozy ADHD-friendly focus companion</p>
-      </div>
-        
-        {/* Right: Mini Stat Cards */}
-        <div className="grid grid-cols-4 gap-2">
-          {[
-            { label: "🔥 Streak", value: `${stats.streak}d`, color: "from-pink-200 to-pink-100" },
-            { label: "✅ Done", value: stats.totalCompleted, color: "from-purple-200 to-purple-100" },
-            { label: "⭐ Level", value: stats.level, color: "from-blue-200 to-blue-100" },
-            { label: "💰 Coins", value: stats.coins, color: "from-yellow-200 to-yellow-100" },
-          ].map((item, i) => (
-            <motion.div
-              key={i}
-              className={`w-25 h-25 rounded-2xl p-2 shadow-md bg-gradient-to-br ${item.color} flex flex-col justify-center items-center`}
-              initial={{ rotate: (i % 2 === 0 ? -2 : 2) }}
-              whileHover={{ scale: 1.05, rotate: 0 }}
-            >
-              <div className="text-xs text-muted-foreground">{item.label}</div>
-              <div className="text-lg font-bold">{item.value}</div>
-            </motion.div>
-          ))}
+        {/* Header */}
+        <div className="text-center pt-8">
+          <Rabbit className="w-20 h-20 mx-auto text-pink-600 animate-bounce" />
+          <h1 className="text-4xl font-bold text-purple-800 mt-4">Bunny Dashboard</h1>
+          <p className="text-lg text-purple-600 mt-1">Your peaceful productivity home</p>
         </div>
 
- 
-      </div>
+        {/* Level & Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
 
+          {/* Current Level */}
+          <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-primary/10 overflow-hidden">
+            <CardContent className="p-8">
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  <p className="text-muted-foreground mb-2">Current Level</p>
+                  <h2 className="text-5xl font-bold text-primary">{stats?.level}</h2>
+                </div>
+                <Award className="w-20 h-20 text-primary opacity-20" />
+              </div>
 
-
-      {/* Main Layout: Sidebar + Content */}
-      <div className="relative z-10 flex flex-1 gap-6">
-        {/* Sidebar */}
-        <div className="flex flex-col items-center gap-3 w-21">
-          {[
-              { view: "dashboard", icon: "🏡", label: "Home" },            // House emoji for dashboard
-              { view: "tasks", icon: "📒", label: "Organizer" },           // Notebook for tasks/organizer
-              { view: "focus", icon: "🧠", label: "Lock In" },             // Target for focus sessions
-              { view: "mood", icon: "🔒", label: "Log Mood" },             // Heart for mood tracking
-              { view: "hobby", icon: "🎨", label: "Start a Hobby" },       // Paint palette for hobbies
-              { view: "finance", icon: "💰", label: "Money Tracking" },    // Money bag for finances
-            ]
-            .map(({ view, icon, label }) => (
-            <Button
-              key={view}
-              onClick={() => setCurrentView(view as any)}
-              variant={currentView === view ? "default" : "outline"}
-              className="pink w-29 h-25 rounded-xl flex flex-col items-center gap-1 text-sm py-3"
-            >
-              <span className="text-xl">{icon}</span>
-              {label}
-            </Button>
-            
-          ))}
-                {/* Settings Icon */}
-        <Button
-          variant="ghost"
-          size="icon"
-          className="rounded-full bg-white/40 hover:bg-white/70 backdrop-blur"
-        >
-          <Settings className="w-5 h-5" />
-        </Button>
-        </div>
-
-        {/* Main Content */}
-        <motion.div
-          key={currentView}
-          initial={{ opacity: 0, y: 15 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="flex-1 p-6 bg-white/70 dark:bg-slate-800/60 backdrop-blur rounded-3xl shadow-lg overflow-y-auto"
-        >
-          {currentView === "dashboard" && (
-            <div>
-              <h2 className="text-3xl font-extrabold mb-4">Welcome Back 🌼</h2>
-              <p className="text-muted-foreground mb-6">
-                You’ve been hopping forward for <strong>{stats.streak}</strong> days straight! Keep the flow going 🌈
+              <div className="space-y-2 mb-4">
+                <div className="flex justify-between text-sm">
+                  <span>Level Progress</span>
+                  <span className="font-semibold">{stats?.xp} / {nextLevelXP} XP</span>
+                </div>
+                <div className="w-full bg-background/50 rounded-full h-4">
+                  <div
+                    className="bg-gradient-to-r from-primary to-accent h-4 rounded-full transition-all duration-700"
+                    style={{ width: `${xpProgress}%` }}
+                  />
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                {nextLevelXP - (stats?.xp ?? 0)} XP to next level
               </p>
+            </CardContent>
+          </Card>
 
-              {/* Focus Modes */}
-              <h4 className="font-semibold mb-3">Focus Modes</h4>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                {focusModes.map((mode, index) => (
-                  <motion.button
-                    key={index}
-                    whileHover={{ scale: 1.05 }}
-                    className="p-4 bg-white/80 rounded-xl shadow border text-center text-sm hover:bg-pink-50"
-                  >
-                    <div className="text-lg mb-1">{mode.icon}</div>
-                    {mode.name}
-                  </motion.button>
+          {/* Coins */}
+          <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-accent/10">
+            <CardContent className="p-6 text-center">
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <Zap className="w-8 h-8 text-accent" />
+                <p className="text-lg text-muted-foreground">Bunny Coins</p>
+              </div>
+              <p className="text-5xl font-bold text-accent">{stats?.coins}</p>
+            </CardContent>
+          </Card>
+
+          {/* Achievements */}
+          <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-secondary/10">
+            <CardContent className="p-6 text-center">
+              <div className="flex items-center justify-center gap-3 mb-3">
+                <Star className="w-8 h-8 text-secondary" />
+                <p className="text-lg text-muted-foreground">Achievements</p>
+              </div>
+              <p className="text-5xl font-bold text-secondary">{stats?.achievements_count}</p>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Urgent Tasks Today */}
+        <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-primary/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3">
+              <AlertCircle className="w-6 h-6 text-red-500" />
+              Urgent Tasks Today ({urgentToday.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {urgentToday.length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">No urgent tasks today! You're doing amazing</p>
+            ) : (
+              <div className="space-y-4">
+                {urgentToday.map(task => (
+                  <div key={task.id} className="flex items-center justify-between p-4 rounded-lg bg-red-50/50 border border-red-200">
+                    <div>
+                      <p className="font-semibold text-foreground">{task.title}</p>
+                      {task.description && <p className="text-sm text-muted-foreground mt-1">{task.description}</p>}
+                    </div>
+                    <Badge className="bg-red-500 text-white">{task.priority}</Badge>
+                  </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </CardContent>
+        </Card>
 
-          {currentView === "tasks" && <TaskList />}
-          {currentView === "focus" && <FocusSession />}
-          {currentView === "mood" && <MoodTracker />}
-          {currentView === "hobby" && <HobbyTracker />}
-          {currentView === "finance" && <ShoppingList />}
-        </motion.div>
+        {/* Items Expiring Soon */}
+        <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-secondary/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-3">
+              <Bell className="w-6 h-6 text-orange-500" />
+              Items Expiring Soon ({expiringItems.length})
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {expiringItems.length === 0 ? (
+              <p className="text-center py-8 text-muted-foreground">Nothing expiring soon</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {expiringItems.map(item => (
+                  <div key={item.id} className="flex items-center justify-between p-4 rounded-lg bg-orange-50/50 border border-orange-200">
+                    <div>
+                      <p className="font-semibold">{item.name}</p>
+                      {item.expiry_date && (
+                        <p className="text-sm text-muted-foreground">
+                          Expires {format(new Date(item.expiry_date), "MMM d")}
+                        </p>
+                      )}
+                    </div>
+                    <div className="text-right">
+                      <p className="font-bold text-orange-600">{item.estimated_cost} DT</p>
+                      <Badge variant="outline" className="mt-1">{item.priority}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Smart Recommendations */}
+        {recommendation && (
+          <Card className="bg-gradient-to-br from-accent/10 via-primary/5 to-secondary/10 border-accent/20">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-3 text-lg">
+                <Star className="w-6 h-6 text-yellow-500" />
+                Bunny's Special Message
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <p className="text-lg text-muted-foreground font-medium">{recommendation.message}</p>
+
+              <div>
+                <h3 className="font-semibold text-accent mb-3">Treat Yourself</h3>
+                <div className="space-y-3">
+                  {recommendation.treat_yourself.map(item => (
+                    <div key={item.id} className="p-4 rounded-lg bg-white/40 backdrop-blur border border-accent/20 flex justify-between items-center">
+                      <div>
+                        <p className="font-medium">{item.name}</p>
+                        <Badge variant="secondary">{item.priority}</Badge>
+                      </div>
+                      <p className="font-bold text-accent">{item.estimated_cost} DT</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold text-secondary mb-3">Or Relax With</h3>
+                <div className="space-y-3">
+                  {recommendation.relax_with.map(hobby => (
+                    <div key={hobby.id} className="p-4 rounded-lg bg-white/40 backdrop-blur border border-secondary/20">
+                      <p className="font-medium">{hobby.name}</p>
+                      {hobby.description && <p className="text-sm text-muted-foreground mt-1">{hobby.description}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        )}
       </div>
-
-      {/* Floating Chat Bunny */}
-      <motion.button
-        whileHover={{ scale: 1.1 }}
-        whileTap={{ scale: 0.9 }}
-        className="fixed bottom-6 right-6 p-3 bg-pink-400 text-white rounded-full shadow-lg hover:bg-pink-500"
-      >
-        <MessageCircle className="w-6 h-6" />
-      </motion.button>
     </div>
   )
 }
