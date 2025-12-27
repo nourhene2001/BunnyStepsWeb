@@ -13,6 +13,7 @@ import { Task, Hobby,Category } from "./types"   // ← Import shared types
 
 interface CATCreatorProps {
   onClose: () => void
+  onSuccess?: () => void  
 }
 
 export default function CategoryCreator({ onClose }: CATCreatorProps) {

@@ -1,25 +1,20 @@
 "use client"
 
 import { Badge } from "@/components/ui/badge"
-import { Checkbox } from "@/components/ui/checkbox"
 import { Button } from "@/components/ui/button"
-import { useState, useEffect } from "react"
+import { useState } from "react"
+import { Card, CardContent } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-
-import { useRouter } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog"
-import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Plus, Tag, Clock, AlertTriangle, Sparkles, Trash2, Edit, Snowflake, Bell, DollarSign, ChevronRight } from "lucide-react"
 import confetti from "canvas-confetti"
 import { format, isToday, isTomorrow, parseISO, isWithinInterval, addDays } from "date-fns"
 import AuthService from "@/services/authService"
-import { Task, Hobby,Category } from "./types"   // ← Import shared types
-
-import { toast } from "sonner" // or use your toast library (e.g. react-hot-toast)
-
+import { Task, Category } from "./types"
+import { toast } from "sonner"
+import { Checkbox } from "@radix-ui/react-checkbox"
 
 const FOCUS_MODES = [
   { value: "pomodoro", label: "Pomodoro" },
@@ -27,225 +22,94 @@ const FOCUS_MODES = [
   { value: "mini", label: "Mini" },
   { value: "shuffle", label: "Shuffle" },
 ]
+
 interface TasksGridProps {
-status: string
-  tasks: Task[] 
-  hobbies: any[]                   // ← Receive from parent
-  onRefresh: () => void       // ← Trigger refresh from parent
+  status: string
+  tasks: Task[]
+  categories: Category[]
+  onRefresh: () => void
 }
 
-export default function TasksGrid({ status }: TasksGridProps) {
-  const [tasks, setTasks] = useState<Task[]>([])
-  const router = useRouter()
-  const [mounted, setMounted] = useState(false)
-  const [categories, setCategories] = useState<Category[]>([])
+export default function TasksGrid({ status, tasks, categories, onRefresh }: TasksGridProps) {
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [reminderModalOpen, setReminderModalOpen] = useState(false)
+  const [shoppingModalOpen, setShoppingModalOpen] = useState(false)
 
-  // Form states for task creator (integrated)
+  // Form states
   const [title, setTitle] = useState("")
   const [description, setDescription] = useState("")
   const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium")
   const [dueDate, setDueDate] = useState("")
   const [taskCategoryId, setTaskCategoryId] = useState("")
   const [preferredFocusMode, setPreferredFocusMode] = useState("")
-  const [editingTask, setEditingTask] = useState<Task | null>(null)
-
-  // Modals
-  const [taskModalOpen, setTaskModalOpen] = useState(false)
-  const [reminderModalOpen, setReminderModalOpen] = useState(false)
-  const [shoppingModalOpen, setShoppingModalOpen] = useState(false)
   const [reminderDate, setReminderDate] = useState("")
   const [shoppingName, setShoppingName] = useState("")
   const [shoppingCost, setShoppingCost] = useState("")
-  const [catName, setCatName] = useState("")
-
-  useEffect(() => {
-    setMounted(true)
-    fetchTasks()
-    fetchCategories()
-  }, [])
 
   const token = AuthService.getAccessToken()
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
 
-  const fetchTasks = async () => {
-    const res = await fetch(`${API_URL}/tasks/`, { headers: { Authorization: `Bearer ${token}` } })
-    if (res.ok) setTasks(await res.json())
-  }
-
-  const fetchCategories = async () => {
-    const res = await fetch(`${API_URL}/categories/`, { headers: { Authorization: `Bearer ${token}` } })
-    if (res.ok) setCategories(await res.json())
-  }
-
-
-const completeTask = async (id: string) => {
-  try {
-    confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } })
-
-    const res = await fetch(`${API_URL}/tasks/${id}/complete/`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    const data = await res.json()
-
-    if (!res.ok) throw new Error(data.detail || "Failed to complete task")
-
-    toast.success("Amazing work!", {
-      description: `+${data.xp} XP & ${data.coins} coins!`,
-    })
-
-    fetchTasks()
-  } catch (err: any) {
-    toast.error(err.message || "Could not complete task")
-  }
-}
-
-const deleteTask = async (id: string) => {
-  if (!confirm("Delete forever?")) return
-
-  await fetch(`${API_URL}/tasks/${id}/`, {
-    method: "DELETE",
-    headers: { Authorization: `Bearer ${token}` },
+  // Filter tasks based on current tab
+  const filteredTasks = tasks.filter(task => {
+    if (status === "todo") return task.status === "todo"
+    if (status === "in_progress") return task.status === "in_progress"
+    if (status === "done") return task.status === "done"
+    if (status === "today") return task.due_date && isToday(parseISO(task.due_date))
+    if (status === "soon") return task.due_date && !isToday(parseISO(task.due_date)) && isWithinInterval(parseISO(task.due_date), { start: new Date(), end: addDays(new Date(), 3) })
+    if (status === "urgent") return ["urgent", "high"].includes(task.priority)
+    return true // "all"
   })
 
-  fetchTasks()
-}
-
-const startProgress = async (task: Task) => {
-  if (task.status !== "todo" || task.frozen) {
-    toast.error("Cannot start this task right now")
-    return
+  const getPriorityColor = (priority: string) => {
+    const colors = {
+      urgent: "bg-pink-100 text-pink-700",
+      high: "bg-red-100 text-red-700",
+      medium: "bg-yellow-100 text-yellow-700",
+      low: "bg-green-100 text-green-700",
+    }
+    return colors[priority as keyof typeof colors] || "bg-gray-100 text-gray-700"
   }
 
-  try {
-    confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } })
-
-    const res = await fetch(`${API_URL}/tasks/${task.id}/start/`, {
-      method: "PATCH",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-    })
-
-    const text = await res.text()
-    let data: any = {}
-
+  const completeTask = async (id: string) => {
     try {
-      data = JSON.parse(text)
-    } catch {
-      throw new Error("Server returned invalid response")
+      confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } })
+      const res = await fetch(`${API_URL}/tasks/${id}/complete/`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || "Failed")
+      toast.success("Amazing work!", { description: `+${data.xp} XP & ${data.coins} coins!` })
+      onRefresh()
+    } catch (err: any) {
+      toast.error(err.message || "Could not complete task")
     }
-
-    if (!res.ok) {
-      throw new Error(data.detail || "Failed to start")
-    }
-
-    toast.success(data.detail)
-
-    router.push(`/focus?taskId=${task.id}&mode=${data.focus_mode}`)
-
-    fetchTasks()
-  } catch (err: any) {
-    console.error("Start failed", err)
-    toast.error(err.message || "Could not start task")
-  }
-}
-
-const freezeTask = async (id: string, freeze: boolean) => {
-  try {
-    const res = await fetch(`${API_URL}/tasks/${id}/toggle_freeze/`, {
-      method: "PATCH",
-      headers: { Authorization: `Bearer ${token}` },
-    })
-
-    const data = await res.json()
-
-    if (!res.ok) {
-      throw new Error(data.detail || "Failed to freeze/unfreeze task")
-    }
-
-    toast.success(freeze ? "Task frozen ❄️" : "Task unfrozen 🔥")
-
-    fetchTasks()
-  } catch (err: any) {
-    toast.error(err.message || "Could not update freeze state")
-  }
-}
-
-
-const saveTask = async () => {
-  const payload: any = {
-    title,
-    description,
-    priority,
-    status: "todo",
   }
 
-  if (taskCategoryId) payload.category = taskCategoryId
-  if (dueDate) payload.due_date = dueDate
-  if (preferredFocusMode) payload.preferred_focus_mode = preferredFocusMode
+  const deleteTask = async (id: string) => {
+    if (!confirm("Delete forever?")) return
+    await fetch(`${API_URL}/tasks/${id}/`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+    onRefresh()
+  }
 
-  const url = editingTask
-    ? `${API_URL}/tasks/${editingTask.id}/`
-    : `${API_URL}/tasks/`
-
-  const method = editingTask ? "PATCH" : "POST"
-
-  await fetch(url, {
-    method,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify(payload),
-  })
-
-  setTitle("")
-  setDescription("")
-  setPriority("medium")
-  setDueDate("")
-  setTaskCategoryId("")
-  setPreferredFocusMode("")
-  setEditingTask(null)
-  setTaskModalOpen(false)
-
-  fetchTasks()
-}
-
-
-const setReminder = async (id: string) => {
-  if (!reminderDate) return
-
-  await fetch(`${API_URL}/reminders/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      task: id,
-      reminder_date: reminderDate,
-    }),
-  })
-
-  setReminderModalOpen(false)
-  setReminderDate("")
-  fetchTasks()
-}
-
-const editTask = (task: Task) => {
-  setEditingTask(task)
-  setTitle(task.title)
-  setDescription(task.description || "")
-  setPriority(task.priority)
-  setDueDate(task.due_date || "")
-  setTaskCategoryId(task.category?.id || "")
-  setPreferredFocusMode(task.preferred_focus_mode || "")
-  setTaskModalOpen(true)
-}
-
+  const startProgress = async (task: Task) => {
+    if (task.status !== "todo" || task.frozen) return toast.error("Cannot start this task")
+    try {
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } })
+      const res = await fetch(`${API_URL}/tasks/${task.id}/start/`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || "Failed")
+      toast.success(data.detail || "Started!")
+      onRefresh()
+      window.location.href = `/focus?taskId=${task.id}&mode=${data.focus_mode}`
+    } catch (err: any) {
+      toast.error(err.message || "Could not start task")
+    }
+  }
 const addShoppingItem = async (id: string) => {
   if (!shoppingName || !shoppingCost) return
 
@@ -265,30 +129,82 @@ const addShoppingItem = async (id: string) => {
   setShoppingModalOpen(false)
   setShoppingName("")
   setShoppingCost("")
-  fetchTasks()
-}
 
-  const filteredTasks = tasks.filter(task => {
-    if (status === "todo") return task.status === "todo"
-    if (status === "in_progress") return task.status === "in_progress"
-    if (status === "done") return task.status === "done"
-    if (status === "today") return task.due_date && isToday(parseISO(task.due_date))
-    if (status === "soon") return task.due_date && isWithinInterval(parseISO(task.due_date), { start: new Date(), end: addDays(new Date(), 3) }) && !isToday(parseISO(task.due_date))
-    if (status === "urgent") return task.priority === "urgent" || task.priority === "high"
-    return true
+}
+const setReminder = async (id: string) => {
+  if (!reminderDate) return
+
+  await fetch(`${API_URL}/reminders/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      task: id,
+      reminder_date: reminderDate,
+    }),
   })
 
-  const getPriorityColor = (priority: string) => {
-    const colors = {
-      high: "bg-red-100 text-red-700",
-      medium: "bg-yellow-100 text-yellow-700",
-      low: "bg-green-100 text-green-700",
-      urgent: "bg-pink-100 text-pink-700",
+  setReminderModalOpen(false)
+  setReminderDate("")
+
+}
+  const freezeTask = async (id: string, freeze: boolean) => {
+    try {
+      const res = await fetch(`${API_URL}/tasks/${id}/toggle_freeze/`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail)
+      toast.success(freeze ? "Task frozen" : "Task unfrozen")
+      onRefresh()
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update")
     }
-    return colors[priority as keyof typeof colors] || ""
   }
 
-  if (!mounted) return null
+  const saveTask = async () => {
+    const payload: any = { title, description: description || null, priority, status: "todo" }
+    if (taskCategoryId) payload.category = taskCategoryId
+    if (dueDate) payload.due_date = dueDate
+    if (preferredFocusMode) payload.preferred_focus_mode = preferredFocusMode
+
+    const url = editingTask ? `${API_URL}/tasks/${editingTask.id}/` : `${API_URL}/tasks/`
+    const method = editingTask ? "PATCH" : "POST"
+
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      body: JSON.stringify(payload),
+    })
+
+    if (res.ok) {
+      toast.success(editingTask ? "Task updated!" : "Task created!")
+      setTaskModalOpen(false)
+      resetForm()
+      onRefresh()
+    } else {
+      const err = await res.json()
+      toast.error("Error: " + JSON.stringify(err))
+    }
+  }
+
+  const resetForm = () => {
+    setTitle(""); setDescription(""); setPriority("medium"); setDueDate(""); setTaskCategoryId(""); setPreferredFocusMode(""); setEditingTask(null)
+  }
+
+  const editTask = (task: Task) => {
+    setEditingTask(task)
+    setTitle(task.title)
+    setDescription(task.description || "")
+    setPriority(task.priority as any)
+    setDueDate(task.due_date || "")
+    setTaskCategoryId(task.category?.id?.toString() || "")
+    setPreferredFocusMode(task.preferred_focus_mode || "")
+    setTaskModalOpen(true)
+  }
 
 
 

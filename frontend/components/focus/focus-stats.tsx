@@ -57,11 +57,11 @@ export default function FocusStats() {
         <CardContent className="p-4 space-y-3">
           <div>
             <p className="text-xs text-muted-foreground mb-1">Weekly Total</p>
-            <p className="text-2xl font-bold text-accent">31 sessions</p>
+            <p className="text-2xl font-bold text-accent"></p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground mb-1">Hours Focused</p>
-            <p className="text-2xl font-bold text-secondary">12.75 hrs</p>
+            <p className="text-2xl font-bold text-secondary"></p>
           </div>
         </CardContent>
       </Card>

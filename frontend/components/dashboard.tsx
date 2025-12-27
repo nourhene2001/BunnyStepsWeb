@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Award, Zap, Star, AlertCircle, Bell, Rabbit } from "lucide-react"
 import { format, isToday } from "date-fns"
 import AuthService from "@/services/authService"
+import NotificationBell from "./Notification"
 
 // Types
 interface Task {
@@ -45,7 +46,14 @@ interface Recommendation {
   treat_yourself: ShoppingItem[]
   relax_with: Hobby[]
 }
-
+interface Notification {
+  id: number
+  type: string
+  title: string
+  message: string
+  created_at: string
+  is_read: boolean
+}
 export default function UltimateDashboard() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [expiringItems, setExpiringItems] = useState<ShoppingItem[]>([])
@@ -102,7 +110,15 @@ export default function UltimateDashboard() {
   useEffect(() => {
     fetchData()
   }, [token])
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetch(`${API_URL}/ping/`, {
+        headers: { Authorization: `Bearer ${token}` }
+      }).catch(() => {})
+    }, 60000) // every minute
 
+    return () => clearInterval(interval)
+  }, [token])
   // Derived values
   const urgentToday = tasks.filter(
     t => !t.completed &&
@@ -134,6 +150,7 @@ export default function UltimateDashboard() {
           <Rabbit className="w-20 h-20 mx-auto text-pink-600 animate-bounce" />
           <h1 className="text-4xl font-bold text-purple-800 mt-4">Bunny Dashboard</h1>
           <p className="text-lg text-purple-600 mt-1">Your peaceful productivity home</p>
+          <NotificationBell />
         </div>
 
         {/* Level & Stats */}

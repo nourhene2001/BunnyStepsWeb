@@ -93,7 +93,7 @@ export default function ShoppingGrid({ items, onUpdate, salaryRemaining }: Shopp
                 </div>
               )}
               <div className="flex gap-2 pt-2 border-t">
-                {!item.purchased && <Button size="sm" onClick={() => markPurchased(item.id)}><Check className="w-4 mr-1" /> Purchased</Button>}
+                {!item.purchased && <Button size="sm" onClick={() => markPurchased(item.id)}><Check className="w-4 mr-1" /> Mark as Purchased</Button>}
                 <Button variant="ghost" size="sm" onClick={() => { setEditingItem(item); setCreatorOpen(true); }}><Edit className="w-4" /></Button>
                 <Button variant="ghost" size="sm" onClick={() => setReminderModalOpen(true)}><Bell className="w-4" /></Button>
                 <Button variant="ghost" size="sm" className="text-destructive" onClick={() => deleteItem(item.id)}><Trash2 className="w-4" /></Button>

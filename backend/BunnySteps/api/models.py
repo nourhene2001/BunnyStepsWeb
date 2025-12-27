@@ -88,6 +88,8 @@ class Task(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
     completed_at = models.DateTimeField(null=True, blank=True)
     completed = models.BooleanField(default=False)
+    _old_status = None
+
     def __str__(self):
         return self.title
 
@@ -208,7 +210,7 @@ class Reminder(models.Model):
     freeze_reason = models.TextField(blank=True)
     snoozed_until = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
-
+    notified = models.BooleanField(default=False, help_text="Prevents duplicate notifications")
     def freeze(self, reason: str = ""):
         self.frozen = True
         self.freeze_reason = reason
@@ -341,12 +343,13 @@ from datetime import timedelta
 # Level up logic
 def level_up(summary: RewardSummary):
     required_xp = summary.level * 1000
+
     if summary.xp >= required_xp:
+        summary.xp -= required_xp   # ✅ subtract instead of double
         summary.level += 1
-        summary.xp *= 2                # Double XP
-        summary.coins *= 2             # Double coins
-        summary.coins += summary.level * 100  # Bonus!
+        summary.coins += summary.level * 100  # bonus
         summary.save(update_fields=['level', 'xp', 'coins'])
+
 
 # Connect signals — THIS IS USUALLY MISSING!
 from django.db.models.signals import post_save
@@ -354,11 +357,16 @@ from django.dispatch import receiver
 
 @receiver(post_save, sender=FocusSession)
 def award_focus_rewards(sender, instance, created, **kwargs):
+    if not created:
+        return  # ✅ prevents rewards on refresh
+
     if instance.ended_at and instance.effective_minutes:
         summary, _ = RewardSummary.objects.get_or_create(user=instance.user)
         minutes = instance.effective_minutes or 0
+
         summary.xp += minutes
         summary.coins += minutes // 10
+
         level_up(summary)
         summary.save()
 
@@ -367,20 +375,13 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 @receiver(post_save, sender=Task)
-def award_task_rewards(sender, instance, **kwargs):
-    # Only trigger when status changes to 'done'
-    if instance.status == "done" and instance.completed_at:
-        # Prevent double-awarding if save() is called multiple times
-        if instance._state.adding:  # new object
-            return
-        try:
-            old = Task.objects.only('status').get(pk=instance.pk)
-            if old.status == "done":  # already done → skip
-                return
-        except Task.DoesNotExist:
-            pass
+def award_task_rewards(sender, instance, created, **kwargs):
+    if created:
+        return  # ✅ no rewards on creation
 
+    if instance._old_status != "done" and instance.status == "done":
         summary, _ = RewardSummary.objects.get_or_create(user=instance.user)
+
         summary.xp += 50
         summary.coins += 10
         level_up(summary)
@@ -406,7 +407,12 @@ def award_task_rewards(sender, instance, **kwargs):
                 key="daily_2_tasks",
                 defaults={"title": "Productive Bunny", "description": "Completed 2 tasks today"}
             )
-
+        Notification.objects.create(
+            user=instance.user,
+            type='task_complete',
+            message=f"Great job! You've completed '{instance.title}'. +50 XP and +10 coins!",
+            related_task=instance
+        )
 
 # Weekly no-impulsive bonus
 # models.py — fix the function
@@ -414,37 +420,61 @@ from django.utils import timezone
 from datetime import timedelta
 
 def check_weekly_discipline(user):
-    # Only check once per day max
     today = timezone.now().date()
-    cache_key = f"weekly_discipline_checked_{user.id}_{today}"
-    
-    # Simple in-memory cache using user object (works because profile view is per user)
-    if hasattr(user, '_discipline_checked_today'):
+
+    # ✅ Skip if already rewarded today
+    if Badge.objects.filter(user=user, key="no_impulsive_week", earned_at__date=today).exists():
         return
-    
+
     week_ago = timezone.now() - timedelta(days=7)
-    
+
     has_impulsive_buy = Expense.objects.filter(
         user=user,
         spent_at__gte=week_ago,
-        shopping_item__isnull=False,
         shopping_item__item_type='impulsive'
     ).exists()
 
     if not has_impulsive_buy:
         summary, _ = RewardSummary.objects.get_or_create(user=user)
-        if not Badge.objects.filter(user=user, key="no_impulsive_week", earned_at__date=today).exists():
+
+        # ✅ SAFE BADGE CREATION
+        badge, created = Badge.objects.get_or_create(
+            user=user,
+            key="no_impulsive_week",
+            defaults={
+                "title": "Discipline Bunny",
+                "description": "No impulsive buys for 7 days!",
+            }
+        )
+
+        # ✅ ONLY ADD COINS IF BADGE WAS JUST CREATED
+        if created:
             summary.coins += 100
             summary.save()
-            
-            Badge.objects.get_or_create(
-                user=user,
-                key="no_impulsive_week",
-                defaults={
-                    "title": "Discipline Bunny",
-                    "description": "No impulsive buys for 7 days!"
-                }
-            )
-    
-    # Mark as checked today
-    user._discipline_checked_today = True
+# models.py (append at the end)
+
+# models.py — update Notification model
+class Notification(models.Model):
+    NOTIFICATION_TYPES = [
+        ('reminder', 'Reminder'),
+        ('task_complete', 'Task Complete'),
+        ('level_up', 'Level Up'),
+        ('badge_earned', 'Badge Earned'),
+        ('reminder_due', 'Reminder Due'),
+        ('weekly_discipline', 'Weekly Discipline'),
+    ]
+
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="notifications")
+    type = models.CharField(max_length=30, choices=NOTIFICATION_TYPES)
+    title = models.CharField(max_length=255, default="New Notification")
+    message = models.TextField()
+    related_task = models.ForeignKey('Task', null=True, blank=True, on_delete=models.SET_NULL)
+    related_reminder = models.ForeignKey('Reminder', null=True, blank=True, on_delete=models.SET_NULL)
+    is_read = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.title} - {self.user}"

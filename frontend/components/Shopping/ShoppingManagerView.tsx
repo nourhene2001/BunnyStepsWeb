@@ -74,13 +74,21 @@ const [editingItem, setEditingItem] = useState<ShoppingItem | null>(null)
   }
 
   // Budget calculations
-  const totalPlanned = items.filter(i => !i.purchased).reduce((sum, i) => sum + i.estimated_cost, 0)
-const totalSpent = items
-  .filter(i => i.purchased)
-  .reduce((sum, i) => sum + Number(i.estimated_cost || 0), 0)  
-  const impulsivePlanned = items.filter(i => !i.purchased && i.item_type === "impulsive").reduce((sum, i) => sum + i.estimated_cost, 0)
+  const totalPlanned = items
+    .filter(i => !i.purchased)
+    .reduce((sum, i) => sum + Number(i.estimated_cost || 0), 0)
+
+  const totalSpent = items
+    .filter(i => i.purchased)
+    .reduce((sum, i) => sum + Number(i.estimated_cost || 0), 0)
+
+  const impulsivePlanned = items
+    .filter(i => !i.purchased && i.item_type === "impulsive")
+    .reduce((sum, i) => sum + Number(i.estimated_cost || 0), 0)
+
   const remaining = salary ? salary.amount - totalPlanned : 0
   const overBudget = remaining < 0
+
 
   // Filtered lists
   const soonItems = items.filter(i => !i.purchased && i.expiry_date && isWithinInterval(new Date(i.expiry_date), { start: new Date(), end: addDays(new Date(), 7) }) || i.note?.includes("almost over"))

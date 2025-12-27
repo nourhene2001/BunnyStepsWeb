@@ -10,11 +10,15 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { CalendarIcon, Snowflake, StickyNote, PlusCircle, CheckCircle2, Clock, Sparkles, ArrowRight, Target } from "lucide-react"
+import { CalendarIcon, Snowflake, StickyNote, PlusCircle, CheckCircle2, Clock, Sparkles, ArrowRight, Target, Plus } from "lucide-react"
 import { format, isToday, isTomorrow, parseISO } from "date-fns"
 import AuthService from "@/services/authService"
 import TaskCreator from "../tasks/task-creator"
 import Link from "next/link"
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@radix-ui/react-dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@radix-ui/react-select"
+import { DialogHeader } from "../ui/dialog"
+import { Category } from "../tasks/types"
 
 interface Hobby {
   id: number
@@ -45,7 +49,11 @@ interface Task {
   due_date?: string
   completed?: boolean
 }
-
+const FOCUS_MODES = [
+  { value: "pomodoro", label: "Pomodoro" },
+  { value: "flow", label: "Flow" },
+  { value: "mini", label: "Mini" },
+  { value: "shuffle", label: "Shuffle" },]
 export default function HobbyTracker() {
   const [hobbies, setHobbies] = useState<Hobby[]>([])
   const [selectedHobby, setSelectedHobby] = useState<Hobby | null>(null)
@@ -59,12 +67,32 @@ export default function HobbyTracker() {
   const [newHobbyName, setNewHobbyName] = useState("")
   const [newHobbyDesc, setNewHobbyDesc] = useState("")
   const [newNote, setNewNote] = useState("")
+  // Forms
+  const [title, setTitle] = useState("")
+  const [description, setDescription] = useState("")
+  const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium")
+  const [dueDate, setDueDate] = useState("")
+  const [taskCategoryId, setTaskCategoryId] = useState("")
+  const [preferredFocusMode, setPreferredFocusMode] = useState("")
+  const [editingTask, setEditingTask] = useState<Task | null>(null)
   const [reminderDate, setReminderDate] = useState("")
+  const [shoppingName, setShoppingName] = useState("")
+  const [shoppingCost, setShoppingCost] = useState("")
+  const [tasks, setTasks] = useState<Task[]>([])
+
+  // Modals
+  const [taskModalOpen, setTaskModalOpen] = useState(false)
+  const [catModalOpen, setCatModalOpen] = useState(false)
+  const [reminderModalOpen, setReminderModalOpen] = useState(false)
+  const [shoppingModalOpen, setShoppingModalOpen] = useState(false)
+  const [catName, setCatName] = useState("")
+  const [catColor, setCatColor] = useState("#f0abfc")
+  const [categories, setCategories] = useState<Category[]>([])
 
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
   const token = AuthService.getAccessToken()
 
-  const fetchHobbies = async () => {
+const fetchHobbies = async () => {
     if (!token) return
     setLoading(true)
     try {
@@ -78,7 +106,68 @@ export default function HobbyTracker() {
       setLoading(false)
     }
   }
+    const fetchTasks = async () => {
+    const res = await fetch(`${API_URL}/api/tasks/`, { headers: { Authorization: `Bearer ${token}` } })
+    if (res.ok) setTasks(await res.json())
+  }
+const saveTask = async () => {
+  const form = new FormData()
+  form.append("title", title)
+  form.append("description", description || "")
+  form.append("priority", priority)
+  form.append("status", "todo")
 
+  if (taskCategoryId) form.append("category", taskCategoryId)
+  if (dueDate) form.append("due_date", dueDate)
+  if (preferredFocusMode) form.append("preferred_focus_mode", preferredFocusMode)
+
+  // THIS IS THE MAGIC LINE — LINK TO CURRENT HOBBY
+  if (selectedHobby) {
+    form.append("hobby", selectedHobby.id.toString())
+  }
+
+  const url = editingTask 
+    ? `${API_URL}/tasks/${editingTask.id}/` 
+    : `${API_URL}/tasks/`
+  
+  const method = editingTask ? "PATCH" : "POST"
+
+  try {
+    const res = await fetch(url, {
+      method,
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    })
+
+    if (!res.ok) {
+      const err = await res.json()
+      console.error("Task save failed:", err)
+      alert("Failed to save task")
+      return
+    }
+
+    // Success — reset and refresh
+    resetTaskForm()
+    setTaskModalOpen(false)
+
+    // Refresh both global tasks AND hobby-specific tasks
+    fetchTasks()
+    if (selectedHobby) loadHobbyDetails(selectedHobby.id)  // This makes it appear instantly!
+  } catch (err) {
+    console.error("Network error:", err)
+    alert("Network error")
+  }
+}
+
+  const resetTaskForm = () => {
+    setTitle("")
+    setDescription("")
+    setPriority("medium")
+    setDueDate("")
+    setTaskCategoryId("")
+    setPreferredFocusMode("")
+    setEditingTask(null)
+  }
 const loadHobbyDetails = async (hobbyId: number) => {
   if (!token) return
 
@@ -207,7 +296,7 @@ const loadHobbyDetails = async (hobbyId: number) => {
           </div>
         </div>
 
-        {/* Selected Hobby Details */}
+         {/* Selected Hobby Details */}
         <div className="lg:col-span-2">
           {selectedHobby ? (
             <Card>
@@ -216,34 +305,48 @@ const loadHobbyDetails = async (hobbyId: number) => {
                 {selectedHobby.description && <p className="text-muted-foreground">{selectedHobby.description}</p>}
               </CardHeader>
               <CardContent className="space-y-8">
-
-                {/* Add Task Button */}
-                <Sheet open={isTaskCreatorOpen} onOpenChange={setIsTaskCreatorOpen}>
-                  <SheetTrigger asChild>
-                    <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-lg py-6">
-                      <PlusCircle className="mr-3" size={20} />
-                      Add New Task for This Hobby
-                    </Button>
-                  </SheetTrigger>
-                  <SheetContent className="w-full sm:max-w-xl">
-                    <SheetHeader>
-                      <SheetTitle>New Task → {selectedHobby.name}</SheetTitle>
-                    </SheetHeader>
-                    <div className="mt-6">
-                      <TaskCreator
-                        initialHobbyId={selectedHobby.id}
-                        onClose={() => setIsTaskCreatorOpen(false)}
-                        onSuccess={() => {
-                          loadHobbyDetails(selectedHobby.id)
-                          setIsTaskCreatorOpen(false)
-                        }}
-                      />
-                    </div>
-                  </SheetContent>
-                </Sheet>
-
-                <Separator />
-
+           <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
+            <DialogTrigger asChild>
+              <Button size="lg" className="bg-primary hover:bg-primary/90">
+                <Plus className="w-6 h-6 mr-2" /> Add Task
+              </Button>
+            </DialogTrigger>
+            <DialogContent className="max-w-2xl">
+              <DialogHeader><DialogTitle>{editingTask ? "Edit Task" : "New Task"}</DialogTitle></DialogHeader>
+              <div className="space-y-4">
+                <Input placeholder="Task title..." value={title} onChange={e => setTitle(e.target.value)} />
+                <Textarea placeholder="Description..." value={description} onChange={e => setDescription(e.target.value)} />
+                <div className="grid grid-cols-2 gap-4">
+                  <Select value={priority} onValueChange={v => setPriority(v as any)}>
+                    <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                      <SelectItem value="urgent">Urgent</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Select value={taskCategoryId} onValueChange={setTaskCategoryId}>
+                    <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
+                    <SelectContent>
+                      {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <Select value={preferredFocusMode} onValueChange={setPreferredFocusMode}>
+                  <SelectTrigger><SelectValue placeholder="Preferred Focus Mode" /></SelectTrigger>
+                  <SelectContent>
+                    {FOCUS_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Input type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)} />
+                {/* Automatically link to selected hobby */}
+                <input type="hidden" name="hobby" value={selectedHobby.id} />
+                <Button onClick={saveTask} size="lg" className="w-full bg-green-600">{editingTask ? "Update" : "Create"} Task</Button>
+              </div>
+            </DialogContent>
+          </Dialog>
+ <Separator />
                 {/* Linked Tasks Section */}
                 <div>
                   <h3 className="text-xl font-semibold mb-4 flex items-center gap-3">
@@ -291,10 +394,8 @@ const loadHobbyDetails = async (hobbyId: number) => {
                     </div>
                   )}
                 </div>
-
-                <Separator />
-
-                {/* Notes & Reminders */}
+<Separator />
+                            {/* Notes & Reminders */}
                 <div className="grid md:grid-cols-2 gap-8">
                   <div>
                     <h4 className="font-semibold mb-3">Progress Notes</h4>
@@ -336,7 +437,8 @@ const loadHobbyDetails = async (hobbyId: number) => {
                     )}
                   </div>
                 </div>
-              </CardContent>
+          
+          </CardContent>
             </Card>
           ) : (
             <Card className="h-96 flex items-center justify-center text-center">

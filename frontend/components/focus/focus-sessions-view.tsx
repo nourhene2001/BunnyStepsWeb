@@ -1,10 +1,12 @@
 "use client"
 
-import { useEffect,  useRef, useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { useEffect, useRef, useState } from "react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import PomodoroTimer from "./pomodoro-timer"
+import FlowTimer from "./flow-timer"
+import MiniTimer from "./mini-timer"
 import FocusStats from "./focus-stats"
 import {
   Play,
@@ -14,222 +16,175 @@ import {
   Sparkles,
   Trophy,
   AlertCircle,
-} from "lucide-react";
-import { format } from "date-fns";
-import axios from "axios";
-import FlowTimer from "./flow-timer"
-import MiniTimer from "./mini-timer"
+} from "lucide-react"
+import { format } from "date-fns"
+import AuthService from "@/services/authService"
 import ShuffleTimer from "./Shuffle-timer"
-type FocusMode = "pomodoro" | "flow" | "mini" | "shuffle";
 
-interface SessionHistory {
-  date: string;
-  mode: FocusMode;
-  duration: number;
-  completed: boolean;
+type FocusMode = "pomodoro" | "flow" | "mini" | "shuffle"
+
+interface FocusSession {
+  id?: number
+  mode: FocusMode
+  effective_minutes: number
+  started_at: string
+  ended_at?: string
+  task?: number | null
 }
 
-const FLOW_MAX_HOURS_PER_DAY = 3;
-const FLOW_MAX_SESSIONS_PER_DAY = 2;
-
 const BUNNY_QUOTES = {
+  pomodoro: "25 minutes of pure focus. You got this!",
   mini: "Let’s just hop for 5 minutes — no pressure!",
   flow: "Ride the wave — I’ll track your time while you stay in the zone!",
   shuffle: "Time to juggle! I’ll shuffle your tasks.",
-  pomodoro: "25 minutes of pure focus. You got this!",
-};
+}
+
+const FLOW_MAX_HOURS_PER_DAY = 3
+const FLOW_MAX_SESSIONS_PER_DAY = 2
 
 export default function FocusSessionsView() {
+  const [mode, setMode] = useState<FocusMode>("pomodoro")
+  const [isRunning, setIsRunning] = useState(false)
+  const [elapsedSeconds, setElapsedSeconds] = useState(0)
+  const [currentSession, setCurrentSession] = useState<FocusSession | null>(null)
+  const [history, setHistory] = useState<FocusSession[]>([])
+  const [flowSessionCount, setFlowSessionCount] = useState(0)
+  const [flowMinutesToday, setFlowMinutesToday] = useState(0)
   const [timerMode, setTimerMode] = useState<"pomodoro" | "flow" | "mini" | "shuffle" >("pomodoro")
-  const [mode, setMode] = useState<FocusMode>("pomodoro");
-  const [isRunning, setIsRunning] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(25 * 60);
-  const [elapsedTime, setElapsedTime] = useState(0);
-  const [selectedTasks, setSelectedTasks] = useState<string[]>([]);
-  const [shuffledTasks, setShuffledTasks] = useState<string[]>([]);
-  const [currentTaskIndex, setCurrentTaskIndex] = useState(0);
-  const [flowSessionCount, setFlowSessionCount] = useState(0);
-  const [flowMinutesToday, setFlowMinutesToday] = useState(0);
-  const [showBunny, setShowBunny] = useState(true);
-  const [history, setHistory] = useState<SessionHistory[]>([]);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
+  const startTimeRef = useRef<number>(0)
 
-  const intervalRef = useRef<NodeJS.Timeout | null>(null);
-  const startTimeRef = useRef<number>(0);
+  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+  const token = AuthService.getAccessToken()
 
-  const API_BASE = "http://localhost:8000/api/focus-sessions/";
-
-  const authHeaders = () => {
-    const token = localStorage.getItem("accessToken"); // your JWT storage
-    return { headers: { Authorization: `Bearer ${token}` } };
-  };
-
-
-  /* ---------- Load History ---------- */
-  useEffect(() => {
-    const loadHistory = async () => {
-      try {
-        const res = await axios.get<SessionHistory[]>(`${API_BASE}`, authHeaders());
-        if (!res.data || !Array.isArray(res.data)) return;
-        setHistory(res.data);
-        updateDailyFlowStats(res.data);
-      } catch (err) {
-        console.error("Error loading sessions:", err);
-      }
-    };
-
-    loadHistory();
-  }, []);
-
-  /* ---------- Save Session ---------- */
-  const saveSession = async (session: SessionHistory) => {
+  // Load history + calculate daily flow stats
+  const loadHistory = async () => {
+    if (!token) return
     try {
-      await axios.post(`${API_BASE}start/`, { mode: session.mode, task_ids: [] }, authHeaders());
-      const updated = [...history, session];
-      setHistory(updated);
-      updateDailyFlowStats(updated);
+      const res = await fetch(`${API_URL}/focus-sessions/`, {
+        headers: { Authorization: `Bearer ${token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setHistory(data)
+        updateDailyFlowStats(data)
+      }
     } catch (err) {
-      console.error("Error saving session:", err);
+      console.error("Failed to load focus sessions", err)
     }
-  };
+  }
 
-  /* ---------- Flow Stats ---------- */
-  const updateDailyFlowStats = (hist: SessionHistory[]) => {
-    const today = format(new Date(), "yyyy-MM-dd");
-    const todayFlow = hist.filter((s) => s.date.startsWith(today) && s.mode === "flow");
-    setFlowSessionCount(todayFlow.length);
-    setFlowMinutesToday(todayFlow.reduce((sum, s) => sum + s.duration, 0));
-  };
-
-  /* ---------- Timer Logic ---------- */
   useEffect(() => {
-    if (!isRunning) return;
+    loadHistory()
+  }, [token])
 
+  // Update Flow limits
+  const updateDailyFlowStats = (sessions: FocusSession[]) => {
+    const today = format(new Date(), "yyyy-MM-dd")
+    const todayFlow = sessions.filter(
+      s => s.mode === "flow" && s.started_at.startsWith(today)
+    )
+    setFlowSessionCount(todayFlow.length)
+    setFlowMinutesToday(todayFlow.reduce((sum, s) => sum + s.effective_minutes, 0))
+  }
+
+  // Start session
+  const startSession = async () => {
     if (mode === "flow") {
-      intervalRef.current = setInterval(() => setElapsedTime((prev) => prev + 1), 1000);
-    } else {
-      intervalRef.current = setInterval(() => {
-        setTimeLeft((prev) => {
-          if (prev <= 1) {
-            handleSessionComplete();
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      if (flowSessionCount >= FLOW_MAX_SESSIONS_PER_DAY) {
+        alert("Max 2 Flow sessions per day!")
+        return
+      }
+      if (flowMinutesToday >= FLOW_MAX_HOURS_PER_DAY * 60) {
+        alert("Max 3 hours of Flow per day!")
+        return
+      }
     }
+
+    const session: FocusSession = {
+      mode,
+      effective_minutes: 0,
+      started_at: new Date().toISOString(),
+      task: null, // you can link task later if needed
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/focus-sessions/`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(session),
+      })
+
+      if (!res.ok) throw new Error("Failed to start session")
+
+      const data = await res.json()
+      setCurrentSession(data)
+      setIsRunning(true)
+      startTimeRef.current = Date.now()
+    } catch (err) {
+      alert("Could not start session")
+      console.error(err)
+    }
+  }
+
+  // End session
+  const endSession = async () => {
+    if (!currentSession) return
+
+    const minutes = Math.floor((Date.now() - startTimeRef.current) / 60000)
+    const updatedSession = {
+      ...currentSession,
+      effective_minutes: minutes,
+      ended_at: new Date().toISOString(),
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/focus-sessions/${currentSession.id}/`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(updatedSession),
+      })
+
+      if (!res.ok) throw new Error("Failed to save session")
+
+      const saved = await res.json()
+      setHistory(prev => [...prev, saved])
+      updateDailyFlowStats([...history, saved])
+      setCurrentSession(null)
+      setIsRunning(false)
+      setElapsedSeconds(0)
+    } catch (err) {
+      alert("Session ended but not saved — check connection")
+    }
+  }
+
+  // Timer tick
+  useEffect(() => {
+    if (!isRunning) {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+      return
+    }
+
+    intervalRef.current = setInterval(() => {
+      setElapsedSeconds(prev => prev + 1)
+    }, 1000)
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-    };
-  }, [isRunning, mode]);
-
-  /* ---------- Handlers ---------- */
-  const startSession = () => {
-    if (mode === "flow" && flowSessionCount >= FLOW_MAX_SESSIONS_PER_DAY) {
-      alert("You reached the Flow limit for today.");
-      return;
+      if (intervalRef.current) clearInterval(intervalRef.current)
     }
-    if (mode === "flow" && flowMinutesToday / 60 >= FLOW_MAX_HOURS_PER_DAY) {
-      alert("You reached the daily Flow hours limit.");
-      return;
-    }
-    if (mode === "shuffle" && selectedTasks.length < 3) {
-      alert("Please select 3 tasks for Shuffle.");
-      return;
-    }
+  }, [isRunning])
 
-    startTimeRef.current = Date.now();
-    setIsRunning(true);
-    setShowBunny(true);
+  // Format time
+  const minutes = Math.floor(elapsedSeconds / 60)
+  const seconds = elapsedSeconds % 60
+  
 
-    if (mode === "shuffle") {
-      const shuffled = [...selectedTasks].sort(() => Math.random() - 0.5);
-      setShuffledTasks(shuffled);
-      setCurrentTaskIndex(0);
-    }
-  };
-
-  const pauseSession = () => setIsRunning(false);
-
-  const resetSession = () => {
-    setIsRunning(false);
-    setElapsedTime(0);
-    setTimeLeft(getDefaultDuration(mode));
-    setCurrentTaskIndex(0);
-  };
-
-  const getDefaultDuration = (m: FocusMode) => {
-    switch (m) {
-      case "pomodoro":
-        return 25 * 60;
-      case "mini":
-        return 5 * 60;
-      case "flow":
-        return 0;
-      case "shuffle":
-        return 15 * 60;
-    }
-  };
-
-  const handleSessionComplete = async () => {
-    setIsRunning(false);
-
-    const duration =
-      mode === "flow"
-        ? Math.floor(elapsedTime / 60)
-        : Math.floor((Date.now() - startTimeRef.current) / 60000);
-
-    const newSession: SessionHistory = {
-      date: new Date().toISOString(),
-      mode,
-      duration,
-      completed: true,
-    };
-
-    await saveSession(newSession);
-
-    if (mode === "shuffle") {
-      alert("Task Shuffle Completed!");
-    }
-  };
-
-  /* ---------- Timer Values ---------- */
-  const minutes = mode === "flow" ? Math.floor(elapsedTime / 60) : Math.floor(timeLeft / 60);
-  const seconds = mode === "flow" ? Math.floor(elapsedTime % 60) : Math.floor(timeLeft % 60);
-
-  /* ---------- Adaptive Suggestion ---------- */
-  const getAdaptiveSuggestion = () => {
-    const pomodoros = history.filter((h) => h.mode === "pomodoro");
-    const minis = history.filter((h) => h.mode === "mini");
-    const flows = history.filter((h) => h.mode === "flow");
-
-    if (pomodoros.length > 5) {
-      const avg = pomodoros.reduce((s, h) => s + h.duration, 0) / pomodoros.length;
-      if (avg > 20) return "You crush Pomodoros! Want another?";
-    }
-    if (minis.length > 3) return "Mini sessions are your strength!";
-    if (flows.length > 2) return "You’re a Flow master!";
-    return null;
-  };
-
-  /* ---------- Helper: Streak Calculator ---------- */
-  const calculateStreak = (history: SessionHistory[]) => {
-    if (history.length === 0) return 0;
-
-    const dates = [...new Set(history.map((h) => h.date.split("T")[0]))].sort().reverse();
-
-    let streak = 0;
-    let current = format(new Date(), "yyyy-MM-dd");
-
-    for (const date of dates) {
-      if (date === current) {
-        streak++;
-        current = format(new Date(Date.parse(current) - 86400000), "yyyy-MM-dd");
-      } else break;
-    }
-
-    return streak;
-  };
   return (
     <div className="max-w-6xl mx-auto space-y-6">
       {/* Header */}
@@ -272,5 +227,5 @@ export default function FocusSessionsView() {
         </div>
       </div>
     </div>
-  )
-}
+  )}
+

@@ -13,6 +13,9 @@ from .views import (
     ExpenseListCreateView,
     ExpiringItemsView,
     ImpulsiveShoppingItemView,
+    NotificationListView,
+    NotificationMarkReadView,
+    PingView,
 
     ReminderForTaskView,
     RewardRecommendationView,
@@ -86,7 +89,7 @@ urlpatterns = [
 
     # Expiring / almost over items
     path("shopping/items/expiring/", ExpiringItemsView.as_view(), name="expiring-items"),
-
+    path('ping/', PingView.as_view()),
     # Impulsive shopping
     path("shopping/items/impulsive/", ImpulsiveShoppingItemView.as_view(), name="impulsive-items"),
     path('register/', views.RegisterView.as_view(), name='register'),
@@ -98,6 +101,8 @@ urlpatterns = [
     path('reward-recommendations/', RewardRecommendationView.as_view(), name='recommendations'),
     path('expiring-items/', ExpiringItemsView.as_view(), name='expiring-items'),
     path('reward-recommendations/', RewardRecommendationView.as_view(), name='reward-recommendations'),
+    path('notifications/', NotificationListView.as_view(), name='notification-list'),
+    path('notifications/<int:pk>/mark-read/', NotificationMarkReadView.as_view(), name='notification-mark-read'),
 ]
 
 

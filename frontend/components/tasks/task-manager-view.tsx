@@ -360,12 +360,15 @@ const deleteTask = async (id: string) => {
         </TabsList>
 
                <TabsContent value={ActiveStatus}>
-          <TasksGrid
-            status={ActiveStatus}
-            tasks={tasks}
-            hobbies={hobbies}
-            onRefresh={fetchData}
-          />
+<TasksGrid
+    status={ActiveStatus}
+    tasks={tasks}           // ← fresh tasks from parent
+    categories={categories} // ← also pass categories
+    onRefresh={() => {
+      fetchTasks()
+      fetchCategories()
+    }}
+  />
         </TabsContent>
       </Tabs>
     </div>

@@ -2,6 +2,9 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
+
+from .utils import fire_due_reminders
+
 from .models import *
 from .serializers import *
 from rest_framework_simplejwt.tokens import UntypedToken
@@ -44,6 +47,7 @@ class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
+        fire_due_reminders(request.user)   # ← THIS LINE
         user = request.user
         return Response({
             "id": user.id,
@@ -144,7 +148,7 @@ class MoodLogViewSet(BaseUserOwnedViewSet):
 
 
 class ShoppingItemViewSet(BaseUserOwnedViewSet):
-    queryset = ShoppingItem.objects.all()
+    queryset = ShoppingItem.objects.all().order_by("-created_at")
     serializer_class = ShoppingItemSerializer
 
 
@@ -164,7 +168,33 @@ class RewardSummaryViewSet(BaseUserOwnedViewSet):
 
 
 
+# views.py (append at the end, import if needed: from rest_framework import generics)
 
+class NotificationListView(generics.ListAPIView):
+    """
+    List unread notifications for the user (or all if ?all=true).
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        queryset = Notification.objects.filter(user=self.request.user)
+        if self.request.query_params.get('all') != 'true':
+            queryset = queryset.filter(is_read=False)  # Only unread by default
+        return queryset.order_by('-created_at')
+
+class NotificationMarkReadView(generics.UpdateAPIView):
+    """
+    Mark a notification as read.
+    """
+    serializer_class = NotificationSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return Notification.objects.filter(user=self.request.user)
+
+    def perform_update(self, serializer):
+        serializer.save(is_read=True)
 from .models import (
     Category, Task, FocusMode, FocusSession, Hobby, HobbyActivity,
     Reminder, Note, MoodLog, ShoppingItem, Expense, Badge, RewardSummary
@@ -610,7 +640,9 @@ class TaskViewSet(viewsets.ModelViewSet):
     serializer_class = TaskSerializer
     permission_classes = [IsAuthenticated]
     queryset = Task.objects.all()  # Required for router
-
+    def list(self, request, *args, **kwargs):
+            fire_due_reminders(request.user)   # ← HERE TOO
+            return super().list(request, *args, **kwargs)
     def get_queryset(self):
         queryset = Task.objects.filter(user=self.request.user) \
             .select_related("category", "shopping_item", "hobby") \
@@ -624,7 +656,7 @@ class TaskViewSet(viewsets.ModelViewSet):
                 hobby_id = int(hobby_param)
                 queryset = queryset.filter(hobby_id=hobby_id)
             except (ValueError, TypeError):
-                pass  # Invalid hobby ID → return no tasks (safe)
+                print('wrong id ',hobby_id)  # Invalid hobby ID → return no tasks (safe)
 
         return queryset
 
@@ -694,7 +726,13 @@ class TaskViewSet(viewsets.ModelViewSet):
             "detail": "Task frozen" if task.frozen else "Task unfrozen"
         })
 
+# views.py
+class PingView(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def get(self, request):
+        fire_due_reminders(request.user)
+        return Response({"status": "ok", "message": "Bunny is awake!"})
 
 # ========================
 # LEGACY VIEWS (keep if you still use them)
@@ -879,7 +917,6 @@ class ExpenseListCreateView(generics.ListCreateAPIView):
 # -------------------------
 # ITEMS NEAR EXPIRATION / AUTO ADD
 # -------------------------
-
 class ExpiringItemsView(generics.ListAPIView):
     """
     Returns items that are near expiration or marked as almost over
