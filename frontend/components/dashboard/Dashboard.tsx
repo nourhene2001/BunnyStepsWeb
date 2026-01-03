@@ -478,11 +478,10 @@ return (
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.4, staggerChildren: 0.1 }}
-        className="grid grid-cols-2 md:grid-cols-4 gap-5"
+        className="grid grid-cols-2 md:grid-cols-3 gap-5"
       >
         {[
           { title: "XP", value: stats?.xp, icon: Zap, color: "blue" },
-          { title: "Coins", value: stats?.coins, icon: Star, color: "amber" },
           { title: "Achievements", value: stats?.achievements_count, icon: Trophy, color: "purple" },
           { title: "Level", value: stats?.level, icon: Award, color: "emerald" },
         ].map((stat, index) => (
