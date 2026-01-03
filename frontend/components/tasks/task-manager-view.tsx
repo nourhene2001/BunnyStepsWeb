@@ -4,7 +4,6 @@ import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import TaskCreator from "./task-creator"
 import TasksGrid from "./tasks-grid"
 import { useRouter } from "next/navigation"
 import { Input } from "@/components/ui/input"
@@ -21,7 +20,9 @@ import AuthService from "@/services/authService"
 import CategoryCreator from "./Category-creator"
 import { Skeleton } from "../ui/skeleton"
 import { Task, Hobby,Category } from "./types"   // ← Import shared types
-
+import { motion } from "framer-motion"
+import { Rabbit } from "lucide-react"
+import ReorderableTaskList from "./ReorderableTaskList"
 
 type ActiveStatus = "todo" | "in_progress" | "done" | "today" | "Soon" |"urgent"
 
@@ -62,7 +63,10 @@ export default function TaskManagerView() {
   const [shoppingModalOpen, setShoppingModalOpen] = useState(false)
   const [catName, setCatName] = useState("")
   const [catColor, setCatColor] = useState("#f0abfc")
-
+  const refreshAll = () => {
+    fetchTasks()
+    fetchCategories()
+  }
   useEffect(() => {
     setMounted(true)
     fetchTasks()
@@ -179,16 +183,62 @@ const fetchData = async () => {
     return daysLeft <= 3 && daysLeft >= 0
   })
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-12 w-64" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[...Array(6)].map((_, i) => <Skeleton key={i} className="h-32" />)}
-        </div>
+if (isLoading) {
+  return (
+    <div className="flex flex-col items-center justify-center py-20 space-y-6 text-center">
+      
+      {/* Bunny */}
+      <motion.div
+        animate={{ y: [0, -6, 0] }}
+        transition={{
+          duration: 1.6,
+          repeat: Infinity,
+          ease: "easeInOut",
+        }}
+        className="p-5 rounded-full bg-accent/10"
+      >
+        <Rabbit className="w-10 h-10 text-accent" />
+      </motion.div>
+
+      {/* Text */}
+      <div className="space-y-1">
+        <p className="text-lg font-medium text-foreground">
+          Getting things ready…
+        </p>
+        <p className="text-sm text-muted-foreground">
+          Just a tiny moment 🐾
+        </p>
       </div>
-    )
-  }
+
+      {/* Soft dots */}
+      <motion.div
+        className="flex gap-2 mt-2"
+        initial="hidden"
+        animate="visible"
+        variants={{
+          visible: {
+            transition: {
+              staggerChildren: 0.2,
+              repeat: Infinity,
+            },
+          },
+        }}
+      >
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            className="w-2 h-2 rounded-full bg-accent/60"
+            variants={{
+              hidden: { opacity: 0.3 },
+              visible: { opacity: 1 },
+            }}
+          />
+        ))}
+      </motion.div>
+    </div>
+  )
+}
+
   const setReminder = async (id: string) => {
     if (!reminderDate) return
     await fetch(`${API_URL}/api/reminders/`, {
@@ -267,20 +317,20 @@ const deleteTask = async (id: string) => {
 
   if (!mounted) return null
 
-  return (
-    <div className="max-w-7xl mx-auto space-y-6">
+return (
+    <div className="max-w-7xl mx-auto space-y-10 py-10 px-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-6">
         <div>
-          <h1 className="text-3xl font-bold text-foreground">Task Manager</h1>
-          <p className="text-muted-foreground mt-1">Break down your goals into manageable steps</p>
+          <h1 className="text-4xl font-semibold text-foreground">Task Manager</h1>
+          <p className="text-lg text-muted-foreground mt-2">Stay calm and focused — one task at a time</p>
         </div>
-        <div >
- 
-                 <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
+        <div className="flex gap-4">
+          <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
             <DialogTrigger asChild>
-              <Button size="lg" className="bg-primary hover:bg-primary/90">
-                <Plus className="w-6 h-6 mr-2" /> Add Task
+              <Button size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                <Plus className="w-5 h-5 mr-2" />
+                Add Task
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-2xl">
@@ -312,64 +362,177 @@ const deleteTask = async (id: string) => {
                   </SelectContent>
                 </Select>
                 <Input type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                <Button onClick={saveTask} size="lg" className="w-full bg-green-600">{editingTask ? "Update" : "Create"} Task</Button>
+                <Button onClick={saveTask} size="lg" className="bg-primary hover:bg-primary/90 text-primary-foreground">{editingTask ? "Update" : "Create"} Task</Button>
               </div>
-            </DialogContent>
-          </Dialog>
-  
-        
-               <Dialog open={catModalOpen} onOpenChange={setCatModalOpen}>
+            </DialogContent> </Dialog>
+          <Dialog open={catModalOpen} onOpenChange={setCatModalOpen}>
             <DialogTrigger asChild>
-              <Button size="lg" variant="outline" className="border-purple-300">
-                <Tag className="w-5 h-5 mr-2" /> Add Category
+              <Button
+                variant="outline"
+                size="lg"
+                className="border-border hover:bg-muted bg-transparent"
+              >
+                <Tag className="w-5 h-5 mr-2" />
+                Add Category
               </Button>
             </DialogTrigger>
-            <DialogContent>
-              <DialogHeader><DialogTitle>New Category</DialogTitle></DialogHeader>
-              <div className="flex gap-3">
-                <Input placeholder="Name" value={catName} onChange={e => setCatName(e.target.value)} />
-                <Input type="color" value={catColor} onChange={e => setCatColor(e.target.value)} className="w-20" />
-                <Button onClick={addCategory}>Add</Button>
-              </div>
+            <DialogContent className="sm:max-w-lg">
+              <DialogHeader>
+                <DialogTitle>Create New Category</DialogTitle>
+              </DialogHeader>
+              <CategoryCreator onClose={() => setCatModalOpen(false)} onSuccess={refreshAll} />
             </DialogContent>
           </Dialog>
+        </div>
       </div>
-      </div>
-          {/* Reminder Alert */}
+      {/* Gentle Reminder */}
       {reminderTasks.length > 0 && (
-        <Card className="border-red-400 bg-red-50 dark:bg-red-950/30">
-          <CardHeader className="flex flex-row items-center gap-3">
-            <BellRing className="w-6 h-6 text-red-600" />
+        <Card className="border-accent/30 bg-accent/10">
+          <CardHeader className="flex flex-row items-center gap-4 pb-4">
+            <BellRing className="w-7 h-7 text-accent" />
             <div>
-              <CardTitle className="text-red-700">Don't forget!</CardTitle>
-              <p className="text-sm">{reminderTasks.length} task{reminderTasks.length > 1 ? "s are" : " is"} urgent or due soon!</p>
+              <CardTitle className="text-xl text-accent-foreground">Gentle Reminder</CardTitle>
+              <p className="text-accent-foreground mt-1">
+                {reminderTasks.length} urgent task{reminderTasks.length > 1 ? "s" : ""} need
+                {reminderTasks.length === 1 ? "s" : ""} attention soon.
+              </p>
             </div>
           </CardHeader>
         </Card>
       )}
       {/* Tabs */}
-      <Tabs value={ActiveStatus} onValueChange={(v) => setActiveStatus(v as ActiveStatus)}>
-        <TabsList className="bg-card">
-          <TabsTrigger value="today">Danger! should be done TODAY !</TabsTrigger>
-          <TabsTrigger value="urgent">Urgent TASK</TabsTrigger>
-          <TabsTrigger value="soon">deadline are almost here!</TabsTrigger>
-          <TabsTrigger value="todo">Upcoming</TabsTrigger>
-          <TabsTrigger value="all">All Tasks</TabsTrigger>
-          <TabsTrigger value="done">Completed</TabsTrigger>
-          <TabsTrigger value="in_progress">In progress</TabsTrigger>
-        </TabsList>
-
-               <TabsContent value={ActiveStatus}>
-<TasksGrid
-    status={ActiveStatus}
-    tasks={tasks}           // ← fresh tasks from parent
-    categories={categories} // ← also pass categories
-    onRefresh={() => {
-      fetchTasks()
-      fetchCategories()
-    }}
-  />
-        </TabsContent>
+<Tabs value={ActiveStatus} onValueChange={(v) => setActiveStatus(v as ActiveStatus)}>
+            <TabsList className="grid grid-cols-3 md:grid-cols-7 w-full h-14 bg-card rounded-2xl p-1.5 gap-1.5 shadow-md border border-border">
+              {/* Tab triggers with enhanced styling */}
+              <TabsTrigger
+                value="today"
+                className="text-sm font-semibold rounded-xl transition-all duration-300
+                           data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg
+                           hover:bg-muted
+                           text-foreground"
+              >
+                <motion.span
+                  className="inline-flex items-center gap-1"
+                  animate={ActiveStatus === "today" ? { scale: 1.05 } : { scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <Clock className="w-4 h-4" />
+                  Today
+                </motion.span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="urgent"
+                className="text-sm font-semibold rounded-xl transition-all duration-300
+                           data-[state=active]:bg-destructive data-[state=active]:text-destructive-foreground data-[state=active]:shadow-lg
+                           hover:bg-muted
+                           text-destructive"
+              >
+                <motion.span
+                  className="inline-flex items-center gap-1"
+                  animate={ActiveStatus === "urgent" ? { scale: 1.05 } : { scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  <AlertTriangle className="w-4 h-4" />
+                  Urgent
+                </motion.span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="Soon"
+                className="text-sm font-semibold rounded-xl transition-all duration-300
+                           data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-lg
+                           hover:bg-muted
+                           text-accent"
+              >
+                <motion.span
+                  className="inline-flex items-center gap-1"
+                  animate={ActiveStatus === "Soon" ? { scale: [1, 1.15, 1] } : { scale: 1 }}
+                  transition={{
+                    duration: ActiveStatus === "Soon" ? 1.5 : 0.2,
+                    repeat: ActiveStatus === "Soon" ? Number.POSITIVE_INFINITY : 0,
+                  }}
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Soon
+                </motion.span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="todo"
+                className="text-sm font-semibold rounded-xl transition-all duration-300
+                           data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg
+                           hover:bg-muted
+                           text-foreground"
+              >
+                <motion.span
+                  className="inline-flex items-center gap-1"
+                  animate={ActiveStatus === "todo" ? { scale: 1.05 } : { scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  To Do
+                </motion.span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="in_progress"
+                className="text-sm font-semibold rounded-xl transition-all duration-300
+                           data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg
+                           hover:bg-muted
+                           text-foreground"
+              >
+                <motion.span
+                  className="inline-flex items-center gap-1"
+                  animate={ActiveStatus === "in_progress" ? { scale: 1.05 } : { scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  In Progress
+                </motion.span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="done"
+                className="text-sm font-semibold rounded-xl transition-all duration-300
+                           data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg
+                           hover:bg-muted
+                           text-foreground"
+              >
+                <motion.span
+                  className="inline-flex items-center gap-1"
+                  animate={ActiveStatus === "done" ? { scale: 1.05 } : { scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  Done
+                </motion.span>
+              </TabsTrigger>
+              <TabsTrigger
+                value="all"
+                className="text-sm font-semibold rounded-xl transition-all duration-300
+                           data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-lg
+                           hover:bg-muted
+                           text-foreground"
+              >
+                <motion.span
+                  className="inline-flex items-center gap-1"
+                  animate={ tasks ? { scale: 1.05 } : { scale: 1 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  All
+                </motion.span>
+              </TabsTrigger>
+            </TabsList>
+<TabsContent value={ActiveStatus} className="mt-10">
+  {["today", "in_progress"].includes(ActiveStatus) ? (
+    <ReorderableTaskList
+      tasks={tasks.filter(task => {
+        if (ActiveStatus === "today") return task.due_date && isToday(parseISO(task.due_date))
+        if (ActiveStatus === "in_progress") return task.status === "in_progress"
+        return false
+      })}
+      categories={categories}
+      onRefresh={refreshAll}
+      onEdit={editTask}
+      onStart={startProgress}
+    />
+  ) : (
+    <TasksGrid status={ActiveStatus} tasks={tasks} categories={categories} onRefresh={refreshAll} />
+  )}
+</TabsContent>
       </Tabs>
     </div>
   )

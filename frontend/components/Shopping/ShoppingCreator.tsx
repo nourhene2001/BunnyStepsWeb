@@ -1,4 +1,3 @@
-// components/shopping-creator.tsx
 "use client"
 
 import { useState } from "react"
@@ -58,52 +57,99 @@ export default function ShoppingCreator({ item, onSave }: ShoppingCreatorProps) 
     })
     onSave()
   }
-
-  return (
-    <div className="space-y-4">
-      <Input placeholder="Item name" value={name} onChange={e => setName(e.target.value)} />
-      <Input type="number" placeholder="Estimated cost (DT)" value={cost} onChange={e => setCost(e.target.value)} />
-      <Input type="date" value={expiry} onChange={e => setExpiry(e.target.value)} placeholder="Expiry / Want by" />
-
-      <div className="flex gap-4">
-        <div>
-          <Label>Type</Label>
-          <Select value={itemType} onValueChange={v => setItemType(v as "needed" | "impulsive")}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="needed">Needed</SelectItem>
-              <SelectItem value="impulsive">Impulsive</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-        <div>
-          <Label>Priority</Label>
-          <Select value={priority} onValueChange={v => setPriority(v as "low" | "medium" | "high")}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="low">Low</SelectItem>
-              <SelectItem value="medium">Medium</SelectItem>
-              <SelectItem value="high">High</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <Checkbox checked={aboutToExpire} onCheckedChange={setAboutToExpire as any} />
-        <Label>Mark as about to expire</Label>
-      </div>
-
-      <div>
-        <Label>Upload Picture (e.g., expiring item)</Label>
-        <Input type="file" accept="image/*" onChange={e => setImageFile(e.target.files?.[0] || null)} />
-      </div>
-
-      <Button onClick={saveItem} className="w-full">{item ? "Update" : "Add"} Item</Button>
+return (
+  <div className="space-y-6">
+    {/* Item Name */}
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-foreground">Item Name</Label>
+      <Input
+        placeholder="e.g., New laptop"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        className="h-12 rounded-xl border-border focus:border-ring focus:ring-ring/50 bg-muted/30 hover:bg-muted/50 transition-colors"
+      />
     </div>
-  )
-}
+
+    {/* Estimated Cost */}
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-foreground">Estimated Cost</Label>
+      <Input
+        type="number"
+        placeholder="e.g., 1200"
+        value={cost}
+        onChange={(e) => setCost(e.target.value)}
+        className="h-12 rounded-xl border-border focus:border-ring focus:ring-ring/50 bg-muted/30 hover:bg-muted/50 transition-colors"
+      />
+    </div>
+
+    {/* Expiry Date */}
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-foreground">Expiry Date (optional)</Label>
+      <Input
+        type="date"
+        value={expiry}
+        onChange={(e) => setExpiry(e.target.value)}
+        className="h-12 rounded-xl border-border focus:border-ring focus:ring-ring/50 bg-muted/30 hover:bg-muted/50 transition-colors"
+      />
+    </div>
+
+    {/* Type & Priority */}
+    <div className="grid grid-cols-2 gap-4">
+      <div className="space-y-2">
+        <Label className="text-sm font-medium text-foreground">Type</Label>
+        <Select value={itemType} onValueChange={(v) => setItemType(v as "needed" | "impulsive")}>
+          <SelectTrigger className="h-12 rounded-xl border-border focus:border-ring focus:ring-ring/50 bg-muted/30 hover:bg-muted/50 transition-colors">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="needed">Needed</SelectItem>
+            <SelectItem value="impulsive">Impulsive</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-2">
+        <Label className="text-sm font-medium text-foreground">Priority</Label>
+        <Select value={priority} onValueChange={(v) => setPriority(v as "low" | "medium" | "high")}>
+          <SelectTrigger className="h-12 rounded-xl border-border focus:border-ring focus:ring-ring/50 bg-muted/30 hover:bg-muted/50 transition-colors">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="low">Low</SelectItem>
+            <SelectItem value="medium">Medium</SelectItem>
+            <SelectItem value="high">High</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
+
+    {/* About to Expire */}
+    <div className="flex items-center gap-3">
+      <Checkbox
+        checked={aboutToExpire}
+        onCheckedChange={setAboutToExpire as any}
+        className="data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+      />
+      <Label className="text-sm font-medium text-foreground cursor-pointer">Mark as about to expire</Label>
+    </div>
+
+    {/* Upload Photo */}
+    <div className="space-y-2">
+      <Label className="text-sm font-medium text-foreground">Upload Photo (optional)</Label>
+      <Input
+        type="file"
+        accept="image/*"
+        onChange={(e) => setImageFile(e.target.files?.[0] || null)}
+        className="h-12 rounded-xl border-border focus:border-ring focus:ring-ring/50 bg-muted/30 hover:bg-muted/50 transition-colors"
+      />
+    </div>
+
+    {/* Save Button */}
+    <Button
+      onClick={saveItem}
+      className="w-full h-12 bg-primary hover:bg-primary/90 text-primary-foreground font-medium rounded-xl shadow-sm"
+    >
+      {item ? "Update Item" : "Add Item"}
+    </Button>
+  </div>
+)}

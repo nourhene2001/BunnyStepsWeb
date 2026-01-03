@@ -10,15 +10,16 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { CalendarIcon, Snowflake, StickyNote, PlusCircle, CheckCircle2, Clock, Sparkles, ArrowRight, Target, Plus } from "lucide-react"
+import { CalendarIcon, Snowflake, StickyNote, PlusCircle, CheckCircle2, Clock, Sparkles, ArrowRight, Target, Plus, Flower2, Leaf, ListTodo, MessageCircle } from "lucide-react"
 import { format, isToday, isTomorrow, parseISO } from "date-fns"
 import AuthService from "@/services/authService"
-import TaskCreator from "../tasks/task-creator"
 import Link from "next/link"
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from "@radix-ui/react-dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@radix-ui/react-select"
 import { DialogHeader } from "../ui/dialog"
 import { Category } from "../tasks/types"
+import TaskCreator from "./task-creator"
+import { toast } from "../ui/use-toast"
 
 interface Hobby {
   id: number
@@ -204,26 +205,56 @@ const loadHobbyDetails = async (hobbyId: number) => {
     setNewHobbyDesc("")
   }
 
-  const toggleFreeze = async (hobby: Hobby) => {
-    const reason = !hobby.frozen ? prompt("Why pause? (optional)")?.trim() : ""
-    await fetch(`${API_URL}/hobbies/${hobby.id}/`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ frozen: !hobby.frozen, freezeReason: reason || null }),
-    })
-    fetchHobbies()
-  }
+const toggleFreeze = async (hobby: Hobby) => {
 
-  const addNote = async () => {
-    if (!selectedHobby || !newNote.trim()) return
-    await fetch(`${API_URL}/notes/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ content: newNote, hobby: selectedHobby.id }),
+  try {
+    const res = await fetch(`${API_URL}/hobbies/${hobby.id}/`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ frozen: !hobby.frozen }),
     })
-    setNewNote("")
-    loadHobbyDetails(selectedHobby.id)
+
+    if (!res.ok) throw new Error("Failed to update hobby")
+
+    fetchHobbies()
+
+    toast({
+      title: "Hobby updated",
+      description: `Hobby is now ${!hobby.frozen ? "active" : "paused"}`,
+      variant: "default",
+    })
+  } catch (err) {
+    console.error(err)
+    toast({
+      title: "Failed to update hobby",
+      description: "Please try again",
+      variant: "destructive",
+    })
   }
+}
+
+
+const addNote = async () => {
+  if (!selectedHobby || !newNote.trim()) return
+
+  await fetch(`${API_URL}/hobbies/${selectedHobby.id}/`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({
+      content: newNote,
+    }),
+  })
+
+  setNewNote("")
+  loadHobbyDetails(selectedHobby.id)
+}
+
 
   const addReminder = async () => {
     if (!selectedHobby || !reminderDate) return
@@ -248,208 +279,231 @@ const loadHobbyDetails = async (hobbyId: number) => {
     return <div className="w-4 h-4 rounded-full border-2 border-muted-foreground" />
   }
 
-  return (
-    <div className="space-y-8">
-      <Card className="bg-gradient-to-br from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20">
-        <CardHeader>
-          <CardTitle className="text-3xl flex items-center gap-3">
-            <Sparkles className="text-purple-600" />
-            Your Hobbies & Passions
+
+return (
+  <div className="max-w-7xl mx-auto space-y-10 py-10 px-4 md:px-6">
+    {/* Header */}
+    <div className="space-y-3">
+      <h1 className="text-3xl md:text-4xl font-semibold text-foreground">Your Hobbies</h1>
+      <p className="text-base text-muted-foreground max-w-2xl">
+        Grow what matters to you, at your own pace. No pressure, just progress.
+      </p>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Hobby List */}
+      <Card className="hover:shadow-lg transition-all duration-300 border-border bg-card/95 backdrop-blur-sm rounded-2xl overflow-hidden">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-lg text-foreground flex items-center gap-2">
+            <Flower2 className="w-5 h-5 text-primary" />
+            Your interests
           </CardTitle>
-          <p className="text-muted-foreground">Grow what makes you come alive</p>
         </CardHeader>
+        <CardContent className="space-y-5">
+          <div className="space-y-3">
+            <Input
+              placeholder="Hobby name"
+              value={newHobbyName}
+              onChange={(e) => setNewHobbyName(e.target.value)}
+              className="rounded-lg border-border bg-muted/30 hover:bg-muted/50 transition-colors"
+            />
+            <Textarea
+              placeholder="Why does it matter?"
+              value={newHobbyDesc}
+              onChange={(e) => setNewHobbyDesc(e.target.value)}
+              rows={2}
+              className="rounded-lg border-border bg-muted/30 hover:bg-muted/50 transition-colors resize-none"
+            />
+            <Button
+              onClick={createHobby}
+              className="w-full rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add hobby
+            </Button>
+          </div>
+
+          <Separator className="bg-border" />
+
+          <div className="space-y-2">
+            {hobbies.length === 0 ? (
+              <p className="text-center text-muted-foreground py-8 text-sm">
+                Start by adding a hobby 🌱
+              </p>
+            ) : (
+              hobbies.map((hobby) => (
+                <button
+                  key={hobby.id}
+                  onClick={() => setSelectedHobby(hobby)}
+                  className={`w-full text-left p-4 rounded-xl border-2 transition-all duration-300 ${
+                    selectedHobby?.id === hobby.id
+                      ? "border-primary bg-primary/10 shadow-md"
+                      : "border-border hover:border-primary/40 hover:bg-primary/5 hover:shadow-sm"
+                  }`}
+                >
+                  <div className="flex justify-between items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-foreground truncate text-sm">
+                        {hobby.name}
+                      </p>
+                      {hobby.description && (
+                        <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                          {hobby.description}
+                        </p>
+                      )}
+                      {hobby.frozen && hobby.freezeReason && (
+                        <p className="text-xs text-muted-foreground italic mt-2 line-clamp-1">
+                          Paused: {hobby.freezeReason}
+                        </p>
+                      )}
+                    </div>
+                    {hobby.frozen ? (
+                      <Badge className="bg-primary/10 text-primary">
+                        Paused
+                      </Badge>
+                    ) : (
+                      <Badge className="bg-accent/10 text-accent">
+                        Active
+                      </Badge>
+                    )}
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </CardContent>
       </Card>
 
-      <div className="grid lg:grid-cols-3 gap-8">
-        {/* Hobby List */}
-        <div className="space-y-4">
-          <Card>
-            <CardHeader><CardTitle className="text-lg">Add New Hobby</CardTitle></CardHeader>
-            <CardContent className="space-y-3">
-              <Input placeholder="Painting, Guitar..." value={newHobbyName} onChange={e => setNewHobbyName(e.target.value)} />
-              <Textarea placeholder="Why does this matter to you?" value={newHobbyDesc} onChange={e => setNewHobbyDesc(e.target.value)} rows={2} />
-              <Button onClick={createHobby} className="w-full" disabled={!newHobbyName.trim()}>
-                <PlusCircle className="mr-2" size={16} /> Create
-              </Button>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-3">
-            {hobbies.map(hobby => (
-              <Card
-                key={hobby.id}
-                className={`cursor-pointer transition-all ${selectedHobby?.id === hobby.id ? "ring-2 ring-purple-500" : ""} ${hobby.frozen ? "opacity-70" : ""}`}
-                onClick={() => setSelectedHobby(hobby)}
-              >
-                <CardHeader className="flex items-start justify-between">
-                  <div>
-                    <h3 className="font-semibold flex items-center gap-2">
-                      {hobby.name}
-                      {hobby.frozen && <Snowflake size={16} className="text-blue-500" />}
-                    </h3>
-                    {hobby.description && <p className="text-xs text-muted-foreground mt-1">{hobby.description}</p>}
-                  </div>
-                  <Switch checked={hobby.frozen} onCheckedChange={() => toggleFreeze(hobby)} onClick={e => e.stopPropagation()} />
-                </CardHeader>
-              </Card>
-            ))}
-          </div>
-        </div>
-
-         {/* Selected Hobby Details */}
-        <div className="lg:col-span-2">
-          {selectedHobby ? (
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-2xl">{selectedHobby.name}</CardTitle>
-                {selectedHobby.description && <p className="text-muted-foreground">{selectedHobby.description}</p>}
-              </CardHeader>
-              <CardContent className="space-y-8">
-           <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
-            <DialogTrigger asChild>
-              <Button size="lg" className="bg-primary hover:bg-primary/90">
-                <Plus className="w-6 h-6 mr-2" /> Add Task
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="max-w-2xl">
-              <DialogHeader><DialogTitle>{editingTask ? "Edit Task" : "New Task"}</DialogTitle></DialogHeader>
-              <div className="space-y-4">
-                <Input placeholder="Task title..." value={title} onChange={e => setTitle(e.target.value)} />
-                <Textarea placeholder="Description..." value={description} onChange={e => setDescription(e.target.value)} />
-                <div className="grid grid-cols-2 gap-4">
-                  <Select value={priority} onValueChange={v => setPriority(v as any)}>
-                    <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="urgent">Urgent</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <Select value={taskCategoryId} onValueChange={setTaskCategoryId}>
-                    <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
-                    <SelectContent>
-                      {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+      {/* Hobby Details */}
+      <Card className="lg:col-span-2 hover:shadow-lg transition-all duration-300 border-border bg-card/95 backdrop-blur-sm rounded-2xl overflow-hidden">
+        {selectedHobby ? (
+          <>
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center gap-3 text-2xl text-foreground">
+                <div className="w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center">
+                  <Leaf className="w-6 h-6 text-primary" />
                 </div>
-                <Select value={preferredFocusMode} onValueChange={setPreferredFocusMode}>
-                  <SelectTrigger><SelectValue placeholder="Preferred Focus Mode" /></SelectTrigger>
-                  <SelectContent>
-                    {FOCUS_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-                <Input type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                {/* Automatically link to selected hobby */}
-                <input type="hidden" name="hobby" value={selectedHobby.id} />
-                <Button onClick={saveTask} size="lg" className="w-full bg-green-600">{editingTask ? "Update" : "Create"} Task</Button>
+                {selectedHobby.name}
+              </CardTitle>
+            </CardHeader>
+
+            <CardContent className="space-y-8">
+              {/* Pause Switch */}
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-xl">
+                <span className="text-sm font-medium text-foreground">Pause this hobby</span>
+                <Switch
+                  checked={!selectedHobby.frozen}
+                  onCheckedChange={() => toggleFreeze(selectedHobby)}
+                />
               </div>
-            </DialogContent>
-          </Dialog>
- <Separator />
-                {/* Linked Tasks Section */}
-                <div>
-                  <h3 className="text-xl font-semibold mb-4 flex items-center gap-3">
-                    <Target className="text-emerald-600" />
-                    Tasks for This Hobby ({linkedTasks.length})
-                  </h3>
 
-                  {linkedTasks.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground">
-                      <Sparkles size={48} className="mx-auto mb-4 opacity-20" />
-                      <p>No tasks yet! Click above to create one</p>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {linkedTasks.map(task => (
-                        <Link href={`/tasks`} key={task.id}>
-                          <Card className="hover:shadow-lg transition-all cursor-pointer border-l-4 border-emerald-500">
-                            <CardContent className="p-4">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  {getStatusIcon(task.status)}
-                                  <div>
-                                    <h4 className={`font-medium ${task.status === "done" ? "line-through text-muted-foreground" : ""}`}>
-                                      {task.title}
-                                    </h4>
-                                    {task.description && <p className="text-sm text-muted-foreground">{task.description}</p>}
-                                  </div>
-                                </div>
-                                <div className="flex items-center gap-3">
-                                  <Badge className={getPriorityColor(task.priority)}>{task.priority}</Badge>
-                                  {task.due_date && (
-                                    <span className="text-xs text-muted-foreground">
-                                      {isToday(parseISO(task.due_date)) ? "Today" :
-                                       isTomorrow(parseISO(task.due_date)) ? "Tomorrow" :
-                                       format(parseISO(task.due_date), "MMM d")}
-                                    </span>
-                                  )}
-                                  <ArrowRight size={16} className="text-muted-foreground" />
-                                </div>
-                              </div>
-                            </CardContent>
-                          </Card>
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                </div>
-<Separator />
-                            {/* Notes & Reminders */}
-                <div className="grid md:grid-cols-2 gap-8">
-                  <div>
-                    <h4 className="font-semibold mb-3">Progress Notes</h4>
-                    <Textarea placeholder="How did it go?" value={newNote} onChange={e => setNewNote(e.target.value)} />
-                    <Button onClick={addNote} size="sm" className="mt-2" disabled={!newNote.trim()}>
-                      <StickyNote className="mr-2" size={16} /> Add Note
+              {/* Tasks Section */}
+              <section className="space-y-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <ListTodo className="w-5 h-5 text-primary" />
+                  Small tasks
+                </h3>
+
+                <Dialog open={isTaskCreatorOpen} onOpenChange={setIsTaskCreatorOpen}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full rounded-lg border-border hover:bg-primary/5"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Add a task
                     </Button>
-                    {notes.length > 0 && (
-                      <div className="mt-4 space-y-2 text-sm">
-                        {notes.slice().reverse().slice(0, 3).map(n => (
-                          <div key={n.id} className="p-2 bg-muted/50 rounded italic">
-                            {n.content}
-                            <span className="block text-xs text-muted-foreground mt-1">
-                              {format(new Date(n.created_at), "PPp")}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                      <DialogTitle>New task for {selectedHobby.name}</DialogTitle>
+                    </DialogHeader>
+                    <TaskCreator
+                      onClose={() => setIsTaskCreatorOpen(false)}
+                      initialHobbyId={selectedHobby.id}
+                      onSuccess={() => loadHobbyDetails(selectedHobby.id)}
+                    />
+                  </DialogContent>
+                </Dialog>
 
-                  <div>
-                    <h4 className="font-semibold mb-3">Reminders</h4>
-                    <div className="flex gap-2">
-                      <Input type="date" value={reminderDate} onChange={e => setReminderDate(e.target.value)} />
-                      <Button onClick={addReminder} disabled={!reminderDate}>
-                        <CalendarIcon size={16} /> Set
-                      </Button>
-                    </div>
-                    {reminders.length > 0 && (
-                      <div className="mt-3 space-y-2">
-                        {reminders.map(r => (
-                          <div key={r.id} className="text-sm flex items-center gap-2 text-muted-foreground">
-                            <Clock size={14} />
-                            {format(new Date(r.reminder_date), "PPP")}
-                          </div>
-                        ))}
+                {linkedTasks.length === 0 ? (
+                  <p className="text-sm text-muted-foreground py-6 text-center">
+                    No tasks yet. Create one to get started!
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {linkedTasks.map((task) => (
+                      <div
+                        key={task.id}
+                        className="p-4 bg-muted/30 rounded-xl border border-border flex items-start gap-4"
+                      >
+                        {getStatusIcon(task.status)}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-foreground">{task.title}</p>
+                          {task.due_date && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Due: {format(parseISO(task.due_date), "MMM d")}
+                            </p>
+                          )}
+                        </div>
+                        <Badge className={getPriorityColor(task.priority)}>
+                          {task.priority}
+                        </Badge>
                       </div>
-                    )}
+                    ))}
                   </div>
-                </div>
-          
+                )}
+              </section>
+
+              <Separator className="bg-border" />
+
+              {/* Notes Section */}
+              <section className="space-y-4">
+                <h3 className="font-semibold text-foreground flex items-center gap-2">
+                  <MessageCircle className="w-5 h-5 text-primary" />
+                  Reflections
+                </h3>
+
+                <Textarea
+                  placeholder="How did it feel? What are you learning?"
+                  value={newNote}
+                  onChange={(e) => setNewNote(e.target.value)}
+                  rows={4}
+                  className="rounded-lg border-border bg-muted/30 hover:bg-muted/50 transition-colors resize-none"
+                />
+
+                <Button
+                  onClick={addNote}
+                  className="w-full rounded-lg bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                  disabled={!newNote.trim()}
+                >
+                  Save reflection
+                </Button>
+
+                {notes.length > 0 && (
+                  <div className="space-y-3 mt-4">
+                    {notes.map((note) => (
+                      <div
+                        key={note.id}
+                        className="p-4 bg-muted/20 rounded-xl border border-border text-sm text-foreground"
+                      >
+                        {note.content}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </section>
+            </CardContent>
+          </>
+        ) : (
+          <CardContent className="h-96 flex flex-col items-center justify-center">
+            <div className="w-20 h-20 rounded-full bg-muted/30 flex items-center justify-center mb-6">
+              <Leaf className="w-10 h-10 text-muted-foreground" />
+            </div>
+            <p className="text-lg text-muted-foreground">Select a hobby to explore it</p>
           </CardContent>
-            </Card>
-          ) : (
-            <Card className="h-96 flex items-center justify-center text-center">
-              <div>
-                <Sparkles size={64} className="mx-auto mb-4 opacity-20" />
-                <p className="text-xl text-muted-foreground">Select a hobby to see your progress</p>
-              </div>
-            </Card>
-          )}
-        </div>
-      </div>
+        )}
+      </Card>
     </div>
-  )
-}
+  </div>
+)}

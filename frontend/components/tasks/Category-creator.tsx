@@ -4,77 +4,100 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import AuthService from "@/services/authService"
-import { Task, Hobby,Category } from "./types"   // ← Import shared types
+import { Category } from "./types"
 
-  const token = AuthService.getAccessToken()
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+const token = AuthService.getAccessToken()
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 interface CATCreatorProps {
   onClose: () => void
-  onSuccess?: () => void  
+  onSuccess?: () => void
 }
 
-export default function CategoryCreator({ onClose }: CATCreatorProps) {
+export default function CategoryCreator({ onClose, onSuccess }: CATCreatorProps) {
   const [description, setDescription] = useState("")
-  const [catColor, setCatColor] = useState("#f0abfc" )
+  const [catColor, setCatColor] = useState("#c4b5fd")
   const [catName, setCatName] = useState("")
-
-  const [categories, setCategories] = useState<Category[]>([])
-  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null)
-  const fetchCategories = async () => {
-    const res = await fetch(`${API_URL}/api/categories/`, { headers: { Authorization: `Bearer ${token}` } })
-    if (res.ok) setCategories(await res.json())
-  }
 
   const addCategory = async () => {
     if (!catName.trim()) return
-    await fetch(`${API_URL}/api/categories/`, {
+
+    const res = await fetch(`${API_URL}/api/categories/`, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ name: catName, color: catColor }),
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        name: catName.trim(),
+        color: catColor,
+        description: description.trim() || null,
+      }),
     })
-    
+
+    if (res.ok) {
+      onSuccess?.()
+      onClose()
+    }
   }
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-8 p-6">
       <div>
-        <label className="text-sm font-semibold mb-2 block">category Name *</label>
+        <label className="block text-sm font-medium text-foreground mb-3">
+          Category Name <span className="text-destructive">*</span>
+        </label>
         <Input
-          placeholder="What do you need to do?"
+          placeholder="e.g., Work, Health, Personal"
           value={catName}
           onChange={(e) => setCatName(e.target.value)}
-          className="bg-background/80"
+          className="h-12 text-base border-input focus:border-ring focus:ring-ring/50 rounded-xl"
         />
       </div>
 
       <div>
-        <label className="text-sm font-semibold mb-2 block">Description</label>
+        <label className="block text-sm font-medium text-foreground mb-3">
+          Description (optional)
+        </label>
         <Textarea
-          placeholder="Add any details about this task..."
+          placeholder="Add details about this category..."
           value={description}
           onChange={(e) => setDescription(e.target.value)}
-          className="bg-background/80 min-h-20"
+          className="min-h-32 text-base border-input focus:border-ring focus:ring-ring/50 rounded-xl resize-none"
+          rows={4}
         />
       </div>
 
+      <div className="flex items-center gap-6 p-4 bg-muted/30 rounded-xl">
+        <label className="text-sm font-medium text-foreground whitespace-nowrap">
+          Category Color
+        </label>
+        <Input
+          type="color"
+          value={catColor}
+          onChange={(e) => setCatColor(e.target.value)}
+          className="w-16 h-16 cursor-pointer border-2 border-border rounded-lg hover:border-ring transition-colors"
+        />
+        <span className="text-sm font-mono text-muted-foreground bg-card px-3 py-1 rounded border">
+          {catColor}
+        </span>
+      </div>
 
-     <div className="flex gap-3">
-                <label className="text-sm font-semibold mb-2 block">Choose a color for this category</label>
-
-                <Input type="color" value={catColor} onChange={e => setCatColor(e.target.value)} className="w-20" />
-    </div>
-
-
-   
-
-      <div className="flex gap-2 justify-end">
-        <Button variant="outline" onClick={onClose}>
+      <div className="flex justify-end gap-4 pt-6 border-t border-border">
+        <Button
+          variant="outline"
+          onClick={onClose}
+          className="h-12 px-8 border-border hover:bg-muted/50"
+        >
           Cancel
         </Button>
-        <Button onClick={addCategory} className="bg-primary hover:bg-primary/90">
-          Create Task
+        <Button
+          onClick={addCategory}
+          disabled={!catName.trim()}
+          className="h-12 px-8 bg-primary hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed text-primary-foreground font-medium"
+        >
+          Create Category
         </Button>
       </div>
     </div>

@@ -1,111 +1,111 @@
 // flow-timer.tsx
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Play, Pause, RotateCcw, Volume2, VolumeX } from "lucide-react"
+import { Play, Pause, RotateCcw, Volume2, VolumeX, Sparkles } from "lucide-react"
+import { useFocusSession } from "@/hooks/useFocusSession"
 
 export default function FlowTimer() {
   const [isRunning, setIsRunning] = useState(false)
-  const [elapsedTime, setElapsedTime] = useState(0)  // No fixed time, just elapsed
-  const [sessionsCompleted, setSessionsCompleted] = useState(0)
+  const [elapsedTime, setElapsedTime] = useState(0)
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const { currentSession, startSession, endSession } = useFocusSession("flow")
+  const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
+  // Timer logic
   useEffect(() => {
-    let interval: NodeJS.Timeout | null = null
-
     if (isRunning) {
-      interval = setInterval(() => {
-        setElapsedTime((t) => t + 1)
+      intervalRef.current = setInterval(() => {
+        setElapsedTime(prev => prev + 1)
       }, 1000)
     }
 
     return () => {
-      if (interval) clearInterval(interval)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
     }
   }, [isRunning])
 
-  // Reminders every 3 hours (10800 seconds)
+  // 3-hour alert
   useEffect(() => {
     if (elapsedTime > 0 && elapsedTime % (3 * 3600) === 0 && soundEnabled) {
-      const audio = new Audio(
-        "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj==",
-      )
-      audio.play().catch(() => {})
-      alert("3 hours passed! Time for a break?")
+      new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj==")
+        .play()
+        .catch(() => {})
+      alert("3 hours passed! Time for a gentle break?")
     }
   }, [elapsedTime, soundEnabled])
 
-  const minutes = Math.floor(elapsedTime / 60)
-  const seconds = elapsedTime % 60
-
-  const toggleTimer = () => {
-    setIsRunning(!isRunning)
+  const toggleTimer = async () => {
+    if (!isRunning) {
+      await startSession()
+      setIsRunning(true)
+    } else {
+      setIsRunning(false)
+    }
   }
 
-  const resetTimer = () => {
+  const resetTimer = async () => {
+    if (currentSession) {
+      const minutes = Math.floor(elapsedTime / 60)
+      await endSession(minutes)
+    }
     setElapsedTime(0)
     setIsRunning(false)
   }
 
-  const endSession = () => {
+  const endNow = async () => {
+    if (currentSession) {
+      const minutes = Math.floor(elapsedTime / 60)
+      await endSession(minutes)
+    }
     setIsRunning(false)
-    setSessionsCompleted((s) => s + 1)
   }
 
+  const minutes = Math.floor(elapsedTime / 60).toString().padStart(2, "0")
+  const seconds = (elapsedTime % 60).toString().padStart(2, "0")
+
   return (
-    <Card className="bg-gradient-to-br from-primary/10 to-accent/10 dark:from-primary/5 dark:to-accent/5 border-primary/20 overflow-hidden">
-      <CardContent className="p-8 space-y-8">
-        {/* Elapsed Time Display */}
+    <Card className="rounded-2xl overflow-hidden border-border bg-card/95 backdrop-blur-sm">
+      <CardContent className="p-6 space-y-6">
         <div className="text-center">
-          <p className="text-8xl font-mono font-bold tracking-tight text-primary">
-            {minutes.toString().padStart(2, "0")}:{seconds.toString().padStart(2, "0")}
+          <h2 className="text-5xl font-bold">{minutes}:{seconds}</h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            {isRunning ? "In flow..." : "Ready to dive in?"}
           </p>
         </div>
 
-        {/* Controls */}
         <div className="flex justify-center gap-4">
-          <Button onClick={toggleTimer} variant="outline" size="lg">
+          <Button onClick={toggleTimer} size="lg">
             {isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
           </Button>
           <Button onClick={resetTimer} variant="outline" size="lg">
             <RotateCcw className="w-5 h-5" />
-          </Button>
-          <Button onClick={endSession} variant="outline" size="lg" disabled={!isRunning}>
-            End Session
           </Button>
           <Button onClick={() => setSoundEnabled(!soundEnabled)} variant="outline" size="lg">
             {soundEnabled ? <Volume2 className="w-5 h-5" /> : <VolumeX className="w-5 h-5" />}
           </Button>
         </div>
 
-        {/* Stats */}
-        <div className="border-t border-primary/20 pt-6">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Sessions Today</p>
-              <p className="text-3xl font-bold text-primary">{sessionsCompleted}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Total Minutes</p>
-              <p className="text-3xl font-bold text-secondary">{sessionsCompleted * (elapsedTime / 60)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Focus Streak</p>
-              <p className="text-3xl font-bold text-accent">7 days</p>
-            </div>
-          </div>
+        <div className="text-center">
+          <Button onClick={endNow} variant="ghost">
+            End Session Now
+          </Button>
         </div>
 
-        {/* Tips */}
-        <div className="bg-background/60 rounded-lg p-4 border border-border">
-          <h4 className="font-semibold text-sm mb-2">Focus Tips</h4>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li>• Silence notifications during focus time</li>
-            <li>• Take a 5-minute break after each session</li>
-            <li>• Drink water to stay hydrated</li>
-            <li>• Stand up and stretch every hour</li>
+        <div className="bg-muted/30 p-6 rounded-2xl border">
+          <h4 className="font-semibold flex items-center gap-2 mb-4">
+            <Sparkles className="w-5 h-5 text-primary" /> Gentle Focus Tips
+          </h4>
+          <ul className="space-y-3 text-sm text-muted-foreground">
+            <li>• Silence notifications</li>
+            <li>• Take a gentle break when ready</li>
+            <li>• Stay hydrated</li>
+            <li>• Stretch lightly</li>
           </ul>
         </div>
       </CardContent>

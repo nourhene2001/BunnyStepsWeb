@@ -1,0 +1,12 @@
+{
+  "dependencies": {
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.2",
+    "drei": "^2.2.21",
+    "postprocessing": "^6.38.2",
+    "three": "^0.182.0"
+  },
+  "devDependencies": {
+    "@types/three": "^0.182.0"
+  }
+}

@@ -2,7 +2,7 @@ from rest_framework import viewsets, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
-
+from django.db.models import Avg, Count
 from .utils import fire_due_reminders
 
 from .models import *
@@ -47,13 +47,30 @@ class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        fire_due_reminders(request.user)   # ← THIS LINE
         user = request.user
+        summary, _ = RewardSummary.objects.get_or_create(user=user)
+        
+        # ADD SALARY (monthly income - store in User or settings)
+        salary = getattr(user, 'salary_amount', 1200)  # Default 1200 DT (~$400 USD)
+        
+        check_weekly_discipline(user)
+
         return Response({
             "id": user.id,
             "username": user.username,
-            "email": user.email,
+            "level": summary.level,
+            "xp": summary.xp,
+            "coins": summary.coins,
+            "achievements_count": user.badges.count(),
+            "salary_amount": salary,  # ✅ ADD THIS
         })
+
+class ShoppingItemListView(generics.ListAPIView):
+    serializer_class = ShoppingItemSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return ShoppingItem.objects.filter(user=self.request.user).select_related('category').order_by('-priority', 'created_at')
 from rest_framework import status
 from rest_framework.views import APIView
 from rest_framework.response import Response
@@ -126,7 +143,17 @@ class HobbyViewSet(BaseUserOwnedViewSet):
     queryset = Hobby.objects.all()
     serializer_class = HobbySerializer
 
+    # ✅ FREEZE / UNFREEZE
+    @action(detail=True, methods=["patch"], url_path="toggle_freeze")
+    def toggle_freeze(self, request, pk=None):
+        hobby = self.get_object()
+        hobby.frozen = not hobby.frozen
+        hobby.save()
 
+        return Response({
+            "frozen": hobby.frozen,
+            "detail": "hobby frozen" if hobby.frozen else "hobby unfrozen"
+        })
 class HobbyActivityViewSet(BaseUserOwnedViewSet):
     queryset = HobbyActivity.objects.select_related("hobby").all()
     serializer_class = HobbyActivitySerializer
@@ -145,6 +172,45 @@ class NoteViewSet(BaseUserOwnedViewSet):
 class MoodLogViewSet(BaseUserOwnedViewSet):
     queryset = MoodLog.objects.all()
     serializer_class = MoodLogSerializer
+
+    @action(detail=False, methods=['get'])
+    def insights(self, request):
+        user = request.user
+        week_ago = timezone.now() - timedelta(days=7)
+        logs = self.get_queryset().filter(created_at__gte=week_ago)
+
+        total = logs.count()
+        avg_rating = logs.aggregate(avg=Avg('rating'))['avg'] or 0
+        today_count = logs.filter(created_at__date=timezone.now().date()).count()
+
+        # Weekly trend (last 7 days)
+        trend = []
+        for i in range(6, -1, -1):
+            day = timezone.now().date() - timedelta(days=i)
+            day_avg = logs.filter(created_at__date=day).aggregate(avg=Avg('rating'))['avg'] or 0
+            trend.append({
+                "time": day.strftime("%a"),
+                "mood": round(day_avg, 1)
+            })
+
+        return Response({
+            "today_checkins": today_count,
+            "weekly_average": round(avg_rating, 1),
+            "weekly_trend": trend,
+            "best_day": max(trend, key=lambda x: x['mood'])['time'] if trend else None,
+            "streak": self._calculate_streak(user)
+        })
+
+    def _calculate_streak(self, user):
+        # Simple streak: consecutive days with at least one log
+        today = timezone.now().date()
+        streak = 0
+        check_date = today
+        logs = self.get_queryset().filter(user=user).dates('created_at', 'day')
+        while check_date in logs:
+            streak += 1
+            check_date -= timedelta(days=1)
+        return streak
 
 
 class ShoppingItemViewSet(BaseUserOwnedViewSet):
@@ -216,16 +282,22 @@ from django.db.models import Count
 from datetime import timedelta
 import random
 
+import random
+from django.db.models import Q, Count
+from django.db.models.functions import TruncDate
+from django.utils import timezone
+from datetime import timedelta
+
 class FocusSessionViewSet(BaseUserOwnedViewSet):
-    queryset = FocusSession.objects.all().select_related("mode")
+    queryset = FocusSession.objects.all()
     serializer_class = FocusSessionSerializer
 
     def get_queryset(self):
-        return super().get_queryset().select_related("mode")
+        qs = super().get_queryset()
+        if self.action in ['list', 'retrieve', 'stats']:
+            qs = qs.select_related('mode')
+        return qs
 
-    # ========================================
-    # START SESSION (Pomodoro / Flow / Mini / Shuffle)
-    # ========================================
     @action(detail=False, methods=["post"], url_path="start")
     def start(self, request):
         serializer = StartFocusSessionSerializer(data=request.data)
@@ -233,33 +305,32 @@ class FocusSessionViewSet(BaseUserOwnedViewSet):
         mode_key = serializer.validated_data["mode"]
         task_ids = serializer.validated_data.get("task_ids", [])
 
-        # Try to load preset config
+        mode = None
         try:
             mode = FocusMode.objects.get(user=request.user, preset=mode_key)
         except FocusMode.DoesNotExist:
-            mode = None
+            pass
 
-        # Create session
         session = FocusSession.objects.create(
             user=request.user,
             mode=mode,
             mode_name=mode.name if mode else mode_key.capitalize(),
-            is_hyperfocus=(mode_key == "flow")
+            is_hyperfocus=(mode_key == "flow"),
+            started_at=timezone.now(),
         )
 
-        # Attach tasks
         if task_ids:
             tasks = Task.objects.filter(id__in=task_ids, user=request.user)
             session.related_tasks.set(tasks)
 
-        # Special shuffle metadata
-        if mode_key == "shuffle":
-            random.shuffle(task_ids)
+        if mode_key == "shuffle" and task_ids:
+            shuffled = task_ids[:]
+            random.shuffle(shuffled)
             session.metadata = {
                 "chosen_tasks": task_ids,
-                "random_order": task_ids
+                "random_order": shuffled
             }
-            session.save()
+            session.save(update_fields=["metadata"])
 
         return Response({
             "session_id": session.id,
@@ -267,84 +338,55 @@ class FocusSessionViewSet(BaseUserOwnedViewSet):
             "message": f"{mode_key.capitalize()} session started!"
         }, status=status.HTTP_201_CREATED)
 
-    # ========================================
-    # END SESSION
-    # ========================================
     @action(detail=True, methods=["post"], url_path="end")
     def end(self, request, pk=None):
         try:
-            session = self.get_object()  # auto-filters by user
+            session = self.get_object()
         except FocusSession.DoesNotExist:
             return Response({"error": "Session not found"}, status=404)
 
+        if session.ended_at:
+            return Response({"error": "Session already ended"}, status=400)
+
         session.ended_at = timezone.now()
-        session.save(update_fields=["ended_at"])
+        if session.started_at:
+            delta = session.ended_at - session.started_at
+            session.effective_minutes = max(0, int(delta.total_seconds() // 60))
+        session.save(update_fields=["ended_at", "effective_minutes"])
 
         return Response({
-            "message": "Session ended",
+            "message": "Session ended successfully",
             "effective_minutes": session.effective_minutes
         })
 
-    # ========================================
-    # FLOW: Check if allowed (max 2 per day)
-    # ========================================
     @action(detail=False, methods=["get"], url_path="flow-allowed")
     def flow_allowed(self, request):
         today = timezone.now().date()
         count = self.get_queryset().filter(
-            mode__preset="flow",
+            Q(mode__preset="flow") | Q(mode_name__iexact="flow"),
             started_at__date=today
         ).count()
 
-        if count >= 2:
-            return Response({"allowed": False, "reason": "Daily limit reached (2 Flow sessions max)"})
-        return Response({"allowed": True})
-
-    # ========================================
-    # MINI: Quick session suggestions
-    # ========================================
-    @action(detail=False, methods=["get"], url_path="mini-info")
-    def mini_info(self, request):
         return Response({
-            "suggested_durations": [5, 7, 10],
-            "bunny_text": "Let’s hop for 5 minutes — no pressure!"
+            "allowed": count < 2,
+            "current_count": count,
+            "max_daily": 2
         })
 
-    # ========================================
-    # SHUFFLE: Get shuffled task order
-    # ========================================
-    @action(detail=False, methods=["post"], url_path="shuffle")
-    def shuffle_tasks(self, request):
-        task_ids = request.data.get("task_ids", [])
-        tasks = Task.objects.filter(id__in=task_ids, user=request.user)
-        task_data = [{"id": t.id, "title": t.title} for t in tasks]
-
-        order = task_ids[:]
-        random.shuffle(order)
-
-        return Response({
-            "selected": task_data,
-            "random_order": order
-        })
-
-    # ========================================
-    # STATS: Weekly chart data
-    # ========================================
     @action(detail=False, methods=["get"], url_path="stats")
     def stats(self, request):
-        now = timezone.now()
-        week_ago = now - timedelta(days=7)
-
+        week_ago = timezone.now() - timedelta(days=7)
         daily = (
             self.get_queryset()
-            .filter(started_at__gte=week_ago)
-            .values("started_at__date")
-            .annotate(count=Count("id"))
-            .order_by("started_at__date")
+            .filter(started_at__gte=week_ago, ended_at__isnull=False)
+            .annotate(day=TruncDate('started_at'))
+            .values('day')
+            .annotate(sessions=Count('id'))
+            .order_by('day')
         )
 
         chart_data = [
-            {"day": d["started_at__date"].strftime("%a"), "sessions": d["count"]}
+            {"day": d["day"].strftime("%a"), "sessions": d["sessions"]}
             for d in daily
         ]
 

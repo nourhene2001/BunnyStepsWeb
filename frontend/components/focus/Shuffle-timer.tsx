@@ -1,28 +1,29 @@
 // Shuffle-timer.tsx
-// shuffle-timer.tsx
 "use client"
 
 import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Play, Pause, RotateCcw, Volume2, VolumeX, CheckCircle } from "lucide-react"
-import AuthService from "@/services/authService"
+import { Play, Pause, RotateCcw, Volume2, VolumeX, Sparkles } from "lucide-react"
 import { Checkbox } from "@/components/ui/checkbox"
+import AuthService from "@/services/authService"
+import { useFocusSession } from "@/hooks/useFocusSession"
 
 interface Task {
   id: string
   title: string
+  status?: string
 }
 
 export default function ShuffleTimer() {
   const [tasks, setTasks] = useState<Task[]>([])
   const [selectedTasks, setSelectedTasks] = useState<string[]>([])
-  const [shuffledTasks, setShuffledTasks] = useState<Task[]>([]) // Shuffled list
+  const [shuffledTasks, setShuffledTasks] = useState<Task[]>([])
   const [currentTaskIndex, setCurrentTaskIndex] = useState(0)
   const [isRunning, setIsRunning] = useState(false)
-  const [timeLeft, setTimeLeft] = useState(60 * 60)  // 60 minutes
-  const [sessionsCompleted, setSessionsCompleted] = useState(0)
+  const [timeLeft, setTimeLeft] = useState(60 * 60)
   const [soundEnabled, setSoundEnabled] = useState(true)
+  const { currentSession, startSession, endSession } = useFocusSession("shuffle")
   const intervalRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
@@ -31,106 +32,134 @@ export default function ShuffleTimer() {
 
   const fetchTasks = async () => {
     const token = AuthService.getAccessToken()
-    const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/tasks/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    })
+    if (!token) return
+
+    const res = await fetch(
+      `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/api/tasks/?status=in_progress`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    )
     if (res.ok) {
       const data = await res.json()
-      setTasks(data.tasks || data)  // adjust based on backend response
+      const allTasks = data.tasks || data
+      const inProgress = allTasks.filter((t: Task) => t.status === "in_progress")
+      setTasks(inProgress)
     }
   }
 
   const toggleTask = (id: string) => {
-    if (selectedTasks.includes(id)) {
-      setSelectedTasks(selectedTasks.filter(t => t !== id))
-    } else if (selectedTasks.length < 3) {
-      setSelectedTasks([...selectedTasks, id])
-    }
+    setSelectedTasks(prev =>
+      prev.includes(id)
+        ? prev.filter(t => t !== id)
+        : prev.length < 3 ? [...prev, id] : prev
+    )
   }
 
-  const shuffleSelectedTasks = () => {
+  const shuffleTasks = () => {
     const selected = tasks.filter(t => selectedTasks.includes(t.id))
-    const shuffled = [...selected].sort(() => Math.random() - 0.5) // Shuffle
+    const shuffled = [...selected].sort(() => Math.random() - 0.5)
     setShuffledTasks(shuffled)
     setCurrentTaskIndex(0)
   }
 
   useEffect(() => {
     if (isRunning && timeLeft > 0) {
-      intervalRef.current = setInterval(() => {
-        setTimeLeft(t => t - 1)
-      }, 1000)
+      intervalRef.current = setInterval(() => setTimeLeft(prev => prev - 1), 1000)
     } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false)
-      setSessionsCompleted(s => s + 1)
-      setTimeLeft(60 * 60) // Reset for next task
-      setCurrentTaskIndex(i => i + 1) // Move to next shuffled task
+      endSession(60)
       if (soundEnabled) {
-        const audio = new Audio("/session-complete.mp3") // Add sound file
-        audio.play().catch(() => {})
+        new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj==")
+          .play()
+          .catch(() => {})
       }
-      if (currentTaskIndex + 1 >= shuffledTasks.length) {
-        alert("All tasks shuffled and completed!")
+      if (currentTaskIndex < shuffledTasks.length - 1) {
+        setCurrentTaskIndex(prev => prev + 1)
+        setTimeLeft(60 * 60)
       }
     }
 
     return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
     }
-  }, [isRunning, timeLeft, soundEnabled, currentTaskIndex, shuffledTasks])
+  }, [isRunning, timeLeft, soundEnabled, currentTaskIndex, shuffledTasks.length, endSession])
 
-  const startShuffle = () => {
-    if (selectedTasks.length === 0) return alert("Select tasks first")
-    shuffleSelectedTasks() // Shuffle on start
-    setIsRunning(true)
+  const toggleTimer = async () => {
+    if (!isRunning) {
+      if (shuffledTasks.length === 0) {
+        alert("Please select and shuffle tasks first!")
+        return
+      }
+      await startSession()
+      setIsRunning(true)
+    } else {
+      setIsRunning(false)
+    }
   }
 
-  const minutes = Math.floor(timeLeft / 60)
-  const seconds = timeLeft % 60
+  const resetTimer = async () => {
+    if (currentSession) {
+      const minutes = Math.floor((60 * 60 - timeLeft) / 60)
+      await endSession(minutes)
+    }
+    setTimeLeft(60 * 60)
+    setIsRunning(false)
+  }
+
+  const minutes = Math.floor(timeLeft / 60).toString().padStart(2, "0")
+  const seconds = (timeLeft % 60).toString().padStart(2, "0")
 
   return (
-    <Card className="bg-gradient-to-br from-primary/10 to-accent/10 dark:from-primary/5 dark:to-accent/5 border-primary/20 overflow-hidden">
-      <CardContent className="p-8 space-y-8">
-        {/* Task Selection */}
-        <div>
-          <h4 className="font-semibold mb-3">Select up to 3 tasks</h4>
-          <div className="space-y-2 max-h-32 overflow-y-auto">
+    <Card className="rounded-2xl overflow-hidden border-border bg-card/95 backdrop-blur-sm">
+      <CardContent className="p-6 space-y-6">
+        <div className="text-center">
+          <h2 className="text-5xl font-bold">{minutes}:{seconds}</h2>
+          <p className="text-sm text-muted-foreground mt-2">
+            {isRunning ? `Task ${currentTaskIndex + 1}/${shuffledTasks.length}` : "Select & shuffle tasks"}
+          </p>
+        </div>
+
+        {!isRunning && shuffledTasks.length === 0 && (
+          <div className="space-y-4">
+            <h3 className="font-medium">Select up to 3 tasks</h3>
             {tasks.map(task => (
-              <div key={task.id} className="flex items-center gap-2">
-                <Checkbox 
+              <div key={task.id} className="flex items-center gap-3 p-3 bg-muted/30 rounded-lg">
+                <Checkbox
                   checked={selectedTasks.includes(task.id)}
                   onCheckedChange={() => toggleTask(task.id)}
                   disabled={selectedTasks.length >= 3 && !selectedTasks.includes(task.id)}
                 />
-                <span className="text-sm">{task.title}</span>
+                <span>{task.title}</span>
               </div>
             ))}
-          </div>
-        </div>
-
-        {/* Current Task */}
-        {shuffledTasks.length > 0 && currentTaskIndex < shuffledTasks.length && (
-          <div className="text-center">
-            <p className="text-lg font-semibold">Current Task: {shuffledTasks[currentTaskIndex].title}</p>
+            <Button onClick={shuffleTasks} disabled={selectedTasks.length < 2} className="w-full">
+              Shuffle Tasks
+            </Button>
           </div>
         )}
 
-        {/* Timer */}
-        <div className="text-center">
-          <p className="text-8xl font-mono font-bold tracking-tight text-primary">
-            {minutes.toString().padStart(2, "0")}:{seconds.toString().padStart(2, "0")}
-          </p>
-        </div>
+        {shuffledTasks.length > 0 && (
+          <div className="space-y-3">
+            {shuffledTasks.map((task, i) => (
+              <div
+                key={task.id}
+                className={`p-4 rounded-lg text-center font-medium ${
+                  i === currentTaskIndex ? "bg-primary text-primary-foreground" : "bg-muted/30"
+                }`}
+              >
+                {i + 1}. {task.title}
+              </div>
+            ))}
+          </div>
+        )}
 
-        {/* Controls */}
         <div className="flex justify-center gap-4">
-          <Button onClick={startShuffle} variant="outline" size="lg" disabled={isRunning}>
-            <Play className="w-5 h-5" /> Start Shuffle
-          </Button>
-          <Button onClick={() => setIsRunning(!isRunning)} variant="outline" size="lg" disabled={!shuffledTasks.length}>
+          <Button onClick={toggleTimer} size="lg" disabled={shuffledTasks.length === 0}>
             {isRunning ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
           </Button>
-          <Button onClick={() => setTimeLeft(60 * 60)} variant="outline" size="lg">
+          <Button onClick={resetTimer} variant="outline" size="lg">
             <RotateCcw className="w-5 h-5" />
           </Button>
           <Button onClick={() => setSoundEnabled(!soundEnabled)} variant="outline" size="lg">
@@ -138,32 +167,15 @@ export default function ShuffleTimer() {
           </Button>
         </div>
 
-        {/* Stats */}
-        <div className="border-t border-primary/20 pt-6">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Sessions Today</p>
-              <p className="text-3xl font-bold text-primary">{sessionsCompleted}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Total Minutes</p>
-              <p className="text-3xl font-bold text-secondary">{sessionsCompleted * 60}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground mb-1">Focus Streak</p>
-              <p className="text-3xl font-bold text-accent">7 days</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Tips */}
-        <div className="bg-background/60 rounded-lg p-4 border border-border">
-          <h4 className="font-semibold text-sm mb-2">Focus Tips</h4>
-          <ul className="text-sm text-muted-foreground space-y-1">
-            <li>• Silence notifications during focus time</li>
-            <li>• Take a 5-minute break after each session</li>
-            <li>• Drink water to stay hydrated</li>
-            <li>• Stand up and stretch every hour</li>
+        <div className="bg-muted/30 p-6 rounded-2xl border">
+          <h4 className="font-semibold flex items-center gap-2 mb-4">
+            <Sparkles className="w-5 h-5 text-primary" /> Gentle Focus Tips
+          </h4>
+          <ul className="space-y-3 text-sm text-muted-foreground">
+            <li>• Silence notifications</li>
+            <li>• Take a gentle break when ready</li>
+            <li>• Stay hydrated</li>
+            <li>• Stretch lightly</li>
           </ul>
         </div>
       </CardContent>

@@ -183,49 +183,73 @@ export default function FocusSessionsView() {
   // Format time
   const minutes = Math.floor(elapsedSeconds / 60)
   const seconds = elapsedSeconds % 60
-  
 
-  return (
-    <div className="max-w-6xl mx-auto space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-foreground">Focus Sessions</h1>
-        <p className="text-muted-foreground mt-1">Stay focused with guided focus sessions</p>
-      </div>
+ return (
+  <div className="space-y-10 p-6 max-w-7xl mx-auto">
+    {/* Header */}
+    <div>
+      <h1 className="text-4xl font-semibold text-foreground">Focus Sessions</h1>
+      <p className="text-lg text-muted-foreground mt-2">Pick a mode and focus gently</p>
+    </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Timer */}
-        <div className="lg:col-span-2">
-          <Tabs value={timerMode} onValueChange={(v) => setTimerMode(v as "pomodoro" | "flow" | "mini" | "shuffle")}>
-            <TabsList>
-              <TabsTrigger value="pomodoro">Pomodoro (25 min)</TabsTrigger>
-              <TabsTrigger value="flow">Flow</TabsTrigger>
-              <TabsTrigger value="mini">Mini</TabsTrigger>
-              <TabsTrigger value="shuffle">Shuffle</TabsTrigger>
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      {/* Main Timer Card */}
+      <Card className="lg:col-span-2 hover:shadow-lg transition-all duration-300 border-border bg-card/95 backdrop-blur-sm rounded-2xl overflow-hidden">
+        <CardHeader className="pb-4">
+          <CardTitle className="text-xl text-foreground">Choose Your Mode</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={timerMode} onValueChange={(v) => setTimerMode(v as typeof timerMode)}>
+            <TabsList className="grid grid-cols-4 w-full h-14 bg-muted/40 rounded-2xl p-2 gap-2">
+              <TabsTrigger
+                value="pomodoro"
+                className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md hover:bg-muted/60 transition-all"
+              >
+                Pomodoro
+              </TabsTrigger>
 
+              <TabsTrigger
+                value="flow"
+                className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md hover:bg-muted/60 transition-all"
+              >
+                Flow
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="mini"
+                className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md hover:bg-muted/60 transition-all"
+              >
+                Mini
+              </TabsTrigger>
+
+              <TabsTrigger
+                value="shuffle"
+                className="rounded-xl data-[state=active]:bg-primary data-[state=active]:text-primary-foreground data-[state=active]:shadow-md hover:bg-muted/60 transition-all"
+              >
+                Shuffle
+              </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="pomodoro">
+            <TabsContent value="pomodoro" className="mt-8">
               <PomodoroTimer />
             </TabsContent>
-         <TabsContent value="flow">
+            <TabsContent value="flow" className="mt-8">
               <FlowTimer />
             </TabsContent>
-                     <TabsContent value="mini">
+            <TabsContent value="mini" className="mt-8">
               <MiniTimer />
             </TabsContent>
-        <TabsContent value="shuffle">
+            <TabsContent value="shuffle" className="mt-8">
               <ShuffleTimer />
             </TabsContent>
-         
           </Tabs>
-        </div>
+        </CardContent>
+      </Card>
 
-        {/* Stats */}
-        <div>
-          <FocusStats />
-        </div>
+      {/* Stats Sidebar */}
+      <div className="space-y-6">
+        <FocusStats />
       </div>
     </div>
-  )}
-
+  </div>
+)}

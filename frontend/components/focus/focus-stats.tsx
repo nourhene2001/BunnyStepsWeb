@@ -7,7 +7,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import AuthService from "@/services/authService"
 
 export default function FocusStats() {
-  const [chartData, setChartData] = useState([])
+  const [chartData, setChartData] = useState<any[]>([])
   const token = AuthService.getAccessToken()
   const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
 
@@ -22,49 +22,60 @@ export default function FocusStats() {
           setChartData(data.chart_data || [])
         }
       } catch (err) {
-        console.error("Failed to load stats", err)
+        console.error("Failed to load focus stats", err)
       }
     }
     fetchStats()
   }, [token])
 
-  return (
-    <div className="space-y-4">
-      <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-primary/10">
-        <CardHeader>
-          <CardTitle className="text-lg">This Week</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer width="100%" height={200}>
+  const totalSessions = chartData.reduce((sum, day) => sum + (day.sessions || 0), 0)
+  const totalMinutes = chartData.reduce((sum, day) => sum + (day.minutes || 0), 0)
+
+// focus-stats.tsx
+return (
+  <div className="space-y-6">
+    {/* Weekly Chart */}
+    <Card className="hover:shadow-lg transition-all duration-300 border-border bg-card/95 backdrop-blur-sm rounded-2xl overflow-hidden">
+      <CardHeader className="pb-4">
+        <CardTitle className="text-xl text-foreground">Focus This Week</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={220}>
             <BarChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
-              <XAxis dataKey="day" stroke="var(--muted-foreground)" style={{ fontSize: "12px" }} />
-              <YAxis stroke="var(--muted-foreground)" style={{ fontSize: "12px" }} />
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--muted))" />
+              <XAxis dataKey="day" stroke="hsl(var(--muted-foreground))" style={{ fontSize: "12px" }} />
+              <YAxis stroke="hsl(var(--muted-foreground))" style={{ fontSize: "12px" }} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "var(--card)",
-                  border: `1px solid var(--border)`,
+                  backgroundColor: "hsl(var(--background))",
+                  border: "1px solid hsl(var(--border))",
                   borderRadius: "8px",
                 }}
               />
-              <Bar dataKey="sessions" fill="var(--primary)" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="sessions" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
-        </CardContent>
-      </Card>
+        ) : (
+          <div className="h-56 flex items-center justify-center text-muted-foreground">
+            No focus data yet this week
+          </div>
+        )}
+      </CardContent>
+    </Card>
 
-      <Card className="bg-gradient-to-br from-accent/10 to-secondary/10 border-accent/20">
-        <CardContent className="p-4 space-y-3">
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Weekly Total</p>
-            <p className="text-2xl font-bold text-accent"></p>
-          </div>
-          <div>
-            <p className="text-xs text-muted-foreground mb-1">Hours Focused</p>
-            <p className="text-2xl font-bold text-secondary"></p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
+    {/* Summary Stats */}
+    <Card className="hover:shadow-lg transition-all duration-300 border-border bg-card/95 backdrop-blur-sm rounded-2xl overflow-hidden">
+      <CardContent className="p-6 space-y-6">
+        <div>
+          <p className="text-sm text-muted-foreground mb-1">Sessions This Week</p>
+          <p className="text-3xl font-bold text-foreground">{totalSessions}</p>
+        </div>
+        <div>
+          <p className="text-sm text-muted-foreground mb-1">Total Minutes Focused</p>
+          <p className="text-3xl font-bold text-foreground">{totalMinutes}</p>
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+)}

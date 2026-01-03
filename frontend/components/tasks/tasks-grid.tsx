@@ -6,22 +6,17 @@ import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Textarea } from "@/components/ui/textarea"
-import { Plus, Tag, Clock, AlertTriangle, Sparkles, Trash2, Edit, Snowflake, Bell, DollarSign, ChevronRight } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Sparkles, Edit, Snowflake, Lock, Clock, MoreHorizontal, Bell, DollarSign, Trash2 } from "lucide-react"
 import confetti from "canvas-confetti"
-import { format, isToday, isTomorrow, parseISO, isWithinInterval, addDays } from "date-fns"
+import { format, isToday, parseISO, isWithinInterval, addDays } from "date-fns"
 import AuthService from "@/services/authService"
 import { Task, Category } from "./types"
 import { toast } from "sonner"
-import { Checkbox } from "@radix-ui/react-checkbox"
+import { Checkbox } from "@/components/ui/checkbox"
 
-const FOCUS_MODES = [
-  { value: "pomodoro", label: "Pomodoro" },
-  { value: "flow", label: "Flow" },
-  { value: "mini", label: "Mini" },
-  { value: "shuffle", label: "Shuffle" },
-]
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+const token = AuthService.getAccessToken()
 
 interface TasksGridProps {
   status: string
@@ -32,25 +27,12 @@ interface TasksGridProps {
 
 export default function TasksGrid({ status, tasks, categories, onRefresh }: TasksGridProps) {
   const [editingTask, setEditingTask] = useState<Task | null>(null)
-  const [taskModalOpen, setTaskModalOpen] = useState(false)
   const [reminderModalOpen, setReminderModalOpen] = useState(false)
   const [shoppingModalOpen, setShoppingModalOpen] = useState(false)
-
-  // Form states
-  const [title, setTitle] = useState("")
-  const [description, setDescription] = useState("")
-  const [priority, setPriority] = useState<"low" | "medium" | "high" | "urgent">("medium")
-  const [dueDate, setDueDate] = useState("")
-  const [taskCategoryId, setTaskCategoryId] = useState("")
-  const [preferredFocusMode, setPreferredFocusMode] = useState("")
   const [reminderDate, setReminderDate] = useState("")
   const [shoppingName, setShoppingName] = useState("")
   const [shoppingCost, setShoppingCost] = useState("")
 
-  const token = AuthService.getAccessToken()
-  const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
-
-  // Filter tasks based on current tab
   const filteredTasks = tasks.filter(task => {
     if (status === "todo") return task.status === "todo"
     if (status === "in_progress") return task.status === "in_progress"
@@ -58,43 +40,98 @@ export default function TasksGrid({ status, tasks, categories, onRefresh }: Task
     if (status === "today") return task.due_date && isToday(parseISO(task.due_date))
     if (status === "soon") return task.due_date && !isToday(parseISO(task.due_date)) && isWithinInterval(parseISO(task.due_date), { start: new Date(), end: addDays(new Date(), 3) })
     if (status === "urgent") return ["urgent", "high"].includes(task.priority)
-    return true // "all"
+    return true
   })
 
   const getPriorityColor = (priority: string) => {
     const colors = {
-      urgent: "bg-pink-100 text-pink-700",
-      high: "bg-red-100 text-red-700",
-      medium: "bg-yellow-100 text-yellow-700",
-      low: "bg-green-100 text-green-700",
+      urgent: "bg-destructive/10 text-destructive",
+      high: "bg-destructive/10 text-destructive",
+      medium: "bg-accent/10 text-accent",
+      low: "bg-secondary/10 text-secondary",
     }
-    return colors[priority as keyof typeof colors] || "bg-gray-100 text-gray-700"
+    return colors[priority as keyof typeof colors] || "bg-muted text-muted-foreground"
   }
 
-  const completeTask = async (id: string) => {
-    try {
-      confetti({ particleCount: 150, spread: 90, origin: { y: 0.6 } })
-      const res = await fetch(`${API_URL}/tasks/${id}/complete/`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
+
+const completeTask = async (id: string) => {
+  try {
+    // Theme colors for confetti
+    const colors = ["#a78bfa", "#f472b6", "#34d399", "#60a5fa", "#facc15"]
+
+    // Firework burst helper
+    const fireworkBurst = (x: number, y: number) => {
+      // Main confetti
+      confetti({
+        particleCount: 20,
+        spread: 100,
+        startVelocity: 30,
+        origin: { x, y },
+        colors,
+        gravity: 0.6,
+        scalar: 1.2,
+        ticks: 200,
       })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.detail || "Failed")
-      toast.success("Amazing work!", { description: `+${data.xp} XP & ${data.coins} coins!` })
-      onRefresh()
-    } catch (err: any) {
-      toast.error(err.message || "Could not complete task")
+
+      // Extra particles for variety
+      for (let i = 0; i < 5; i++) {
+        confetti({
+          particleCount: 1,
+          origin: { x, y },
+          colors: [colors[Math.floor(Math.random() * colors.length)]],
+          shapes: ["circle"], // ✅ allowed shape
+          gravity: 0.3,
+          drift: (Math.random() - 0.5) * 2,
+          startVelocity: 20 + Math.random() * 10,
+          decay: 0.95,
+          scalar: 1,
+        })
+      }
     }
+
+    // Animate bursts for 1.5 seconds
+    const duration = 1500
+    const animationEnd = Date.now() + duration
+    const frame = () => {
+      const x = Math.random()
+      const y = Math.random() * 0.5 + 0.2
+      fireworkBurst(x, y)
+      if (Date.now() < animationEnd) requestAnimationFrame(frame)
+    }
+    frame()
+
+    // API call to complete task
+    const res = await fetch(`${API_URL}/tasks/${id}/complete/`, {
+      method: "PATCH",
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    if (!res.ok) throw new Error("Failed")
+
+    // Simple toast notification
+    toast.success("🎉 Amazing work! +XP & coins!", {
+      icon: "🏆",
+      style: { transform: "scale(1.1)", transition: "transform 0.3s ease-in-out" },
+    })
+
+    onRefresh()
+  } catch (err) {
+    console.error(err)
+    toast.error("Could not complete task")
   }
+}
+
 
   const deleteTask = async (id: string) => {
     if (!confirm("Delete forever?")) return
-    await fetch(`${API_URL}/tasks/${id}/`, { method: "DELETE", headers: { Authorization: `Bearer ${token}` } })
+    await fetch(`${API_URL}/tasks/${id}/`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    })
     onRefresh()
   }
 
-  const startProgress = async (task: Task) => {
-    if (task.status !== "todo" || task.frozen) return toast.error("Cannot start this task")
+  const handleStart = async (task: Task) => {
+    if (task.status !== "todo" || task.frozen) { toast.error("Cannot start this task"); return }
     try {
       confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } })
       const res = await fetch(`${API_URL}/tasks/${task.id}/start/`, {
@@ -105,52 +142,26 @@ export default function TasksGrid({ status, tasks, categories, onRefresh }: Task
       if (!res.ok) throw new Error(data.detail || "Failed")
       toast.success(data.detail || "Started!")
       onRefresh()
-      window.location.href = `/focus?taskId=${task.id}&mode=${data.focus_mode}`
-    } catch (err: any) {
-      toast.error(err.message || "Could not start task")
-    }
+    } catch { toast.error("Could not start task") }
   }
-const addShoppingItem = async (id: string) => {
-  if (!shoppingName || !shoppingCost) return
 
-  await fetch(`${API_URL}/shopping-items/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      name: shoppingName,
-      estimated_cost: Number(shoppingCost),
-      task: id,
-    }),
-  })
+  const handleStartFocus = async (task: Task) => {
+    if (task.status !== "todo" || task.frozen) { toast.error("Cannot start this task"); return }
+    try {
+      confetti({ particleCount: 50, spread: 60, origin: { y: 0.7 } })
+      const res = await fetch(`${API_URL}/tasks/${task.id}/start/`, {
+        method: "PATCH",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.detail || "Failed")
+      toast.success("Locked in! Let's focus!")
+      onRefresh()
+      window.location.href = `/focus?taskId=${task.id}&mode=${data.focus_mode}`
+    } catch { toast.error("Could not lock in") }
+  }
 
-  setShoppingModalOpen(false)
-  setShoppingName("")
-  setShoppingCost("")
-
-}
-const setReminder = async (id: string) => {
-  if (!reminderDate) return
-
-  await fetch(`${API_URL}/reminders/`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`,
-    },
-    body: JSON.stringify({
-      task: id,
-      reminder_date: reminderDate,
-    }),
-  })
-
-  setReminderModalOpen(false)
-  setReminderDate("")
-
-}
-  const freezeTask = async (id: string, freeze: boolean) => {
+  const handleFreeze = async (id: string, freeze: boolean) => {
     try {
       const res = await fetch(`${API_URL}/tasks/${id}/toggle_freeze/`, {
         method: "PATCH",
@@ -158,159 +169,259 @@ const setReminder = async (id: string) => {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.detail)
-      toast.success(freeze ? "Task frozen" : "Task unfrozen")
+      toast.success(freeze ? "Task frozen ❄️" : "Task unfrozen ✅")
       onRefresh()
-    } catch (err: any) {
-      toast.error(err.message || "Failed to update")
-    }
+    } catch { toast.error("Failed to update") }
   }
 
-  const saveTask = async () => {
-    const payload: any = { title, description: description || null, priority, status: "todo" }
-    if (taskCategoryId) payload.category = taskCategoryId
-    if (dueDate) payload.due_date = dueDate
-    if (preferredFocusMode) payload.preferred_focus_mode = preferredFocusMode
-
-    const url = editingTask ? `${API_URL}/tasks/${editingTask.id}/` : `${API_URL}/tasks/`
-    const method = editingTask ? "PATCH" : "POST"
-
-    const res = await fetch(url, {
-      method,
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify(payload),
-    })
-
-    if (res.ok) {
-      toast.success(editingTask ? "Task updated!" : "Task created!")
-      setTaskModalOpen(false)
-      resetForm()
-      onRefresh()
-    } else {
-      const err = await res.json()
-      toast.error("Error: " + JSON.stringify(err))
-    }
-  }
-
-  const resetForm = () => {
-    setTitle(""); setDescription(""); setPriority("medium"); setDueDate(""); setTaskCategoryId(""); setPreferredFocusMode(""); setEditingTask(null)
-  }
-
-  const editTask = (task: Task) => {
+  const handleReminderOpen = (task: Task) => {
     setEditingTask(task)
-    setTitle(task.title)
-    setDescription(task.description || "")
-    setPriority(task.priority as any)
-    setDueDate(task.due_date || "")
-    setTaskCategoryId(task.category?.id?.toString() || "")
-    setPreferredFocusMode(task.preferred_focus_mode || "")
-    setTaskModalOpen(true)
+    setReminderModalOpen(true)
   }
 
+  const handleShoppingOpen = (task: Task) => {
+    setEditingTask(task)
+    setShoppingModalOpen(true)
+  }
 
+  const setReminder = async (id: string) => {
+    if (!reminderDate) return toast.error("Pick a reminder time!")
+    try {
+      await fetch(`${API_URL}/reminders/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ task: id, reminder_date: reminderDate }),
+      })
+      toast.success("Reminder set! 🔔")
+      setReminderModalOpen(false)
+      setReminderDate("")
+      onRefresh()
+    } catch { toast.error("Failed to set reminder") }
+  }
 
-  return (
-    <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {filteredTasks.map(task => (
-        <Card
-          key={task.id}
-          className={`bg-white/60 dark:bg-slate-800/60 backdrop-blur border-primary/10 cursor-pointer hover:border-primary/30 transition-colors ${
-            task.completed ? "opacity-60" : ""
-          }`}
-        >
-          <CardContent className="p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <Checkbox checked={task.completed} onCheckedChange={() => completeTask(task.id)} className="mt-1" />
-              <div className="flex-1">
-                <h3
-                  className={`font-semibold ${
-                    task.completed ? "line-through text-muted-foreground" : "text-foreground"
-                  }`}
+  const addShoppingItem = async (id: string) => {
+    if (!shoppingName || !shoppingCost) return toast.error("Add item name & cost!")
+    try {
+      await fetch(`${API_URL}/shopping-items/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          name: shoppingName,
+          estimated_cost: Number(shoppingCost),
+          task: id,
+        }),
+      })
+      toast.success("Added to shopping list! 🛒")
+      setShoppingModalOpen(false)
+      setShoppingName("")
+      setShoppingCost("")
+      onRefresh()
+    } catch { toast.error("Failed to add shopping item") }
+  }
+
+return (
+  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+    {filteredTasks.map((task) => (
+      <Card
+        key={task.id}
+        className="hover:shadow-lg transition-all duration-300 border-border bg-card/95 backdrop-blur-sm overflow-hidden"
+      >
+        <CardContent className="pt-6 pb-5 space-y-5">
+          {/* More Menu */}
+          <div className="absolute top-4 right-4 z-10">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 rounded-full hover:bg-muted/80"
                 >
-                  {task.title}
-                  {task.frozen && (
-                    <span title="This task is frozen" className="inline-block">
-                      <Snowflake className="w-4 h-4 inline ml-2 text-blue-400" />
-                    </span>
-                  )}
-                </h3>
-                {task.description && <p className="text-xs text-muted-foreground mt-1">{task.description}</p>}
-              </div>
+                  <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onClick={() => handleReminderOpen(task)}>
+                  <Bell className="mr-2 h-4 w-4" /> Set Reminder
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => handleShoppingOpen(task)}>
+                  <DollarSign className="mr-2 h-4 w-4" /> Add to Shopping
+                </DropdownMenuItem>
+                <DropdownMenuItem>
+                  <Edit className="mr-2 h-4 w-4" /> Edit
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-destructive focus:text-destructive"
+                  onClick={() => deleteTask(task.id)}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" /> Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+
+          {/* Title + Checkbox */}
+          <div className="flex items-start gap-4 pr-10">
+            <Checkbox
+              checked={task.completed}
+              onCheckedChange={() => !task.completed && completeTask(task.id)}
+              className="mt-1 h-5 w-5 border-2 rounded-md data-[state=checked]:bg-primary data-[state=checked]:border-primary"
+            />
+            <div className="flex-1 min-w-0">
+              <h3
+                className={`font-medium text-lg break-words flex items-center gap-2 ${
+                  task.completed
+                    ? "text-muted-foreground line-through opacity-70"
+                    : "text-foreground"
+                }`}
+              >
+                {task.title}
+                {task.frozen && (
+                  <Snowflake className="w-4 h-4 text-accent animate-pulse" />
+                )}
+              </h3>
+
+              {task.description && (
+                <p className="mt-2 text-sm text-muted-foreground line-clamp-3">
+                  {task.description}
+                </p>
+              )}
             </div>
+          </div>
 
-            <div className="flex flex-wrap gap-2">
-              {task.category && <Badge variant="outline" className="text-xs">{task.category.name}</Badge>}
-              <Badge className={`text-xs ${getPriorityColor(task.priority)}`}>{task.priority}</Badge>
-            </div>
+          {/* Badges */}
+          <div className="flex flex-wrap gap-2">
+            {task.category && (
+              <Badge
+                variant="secondary"
+                style={{
+                  backgroundColor: `${task.category.color}20`,
+                  color: task.category.color,
+                  borderColor: task.category.color + "40",
+                }}
+                className="border"
+              >
+                {task.category.name}
+              </Badge>
+            )}
+            <Badge className={getPriorityColor(task.priority)}>
+              {task.priority.toUpperCase()}
+            </Badge>
+            {task.status === "in_progress" && !task.completed && (
+              <Badge className="bg-primary/10 text-primary">
+                <span className="relative flex h-2 w-2 mr-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
+                </span>
+                In Progress
+              </Badge>
+            )}
+          </div>
 
-            {task.due_date && <p className="text-xs text-muted-foreground">Due: {format(parseISO(task.due_date), "MMM d")}</p>}
+          {/* Due Date */}
+          {task.due_date && (
+            <p className="text-sm text-muted-foreground flex items-center gap-1.5">
+              <Clock className="w-4 h-4" />
+              Due: <span className="font-medium">{format(parseISO(task.due_date), "MMM d, yyyy")}</span>
+            </p>
+          )}
 
-            <div className="flex gap-2 justify-end pt-2 border-t border-border">
-              {task.status != "done" && task.status != "in_progress" && !task.frozen && <Button size="sm" onClick={() => startProgress(task)}>Start</Button>}
-              <Button size="sm" variant="outline" onClick={() => freezeTask(task.id, !task.frozen)}>
-            {task.frozen ? "Unfreeze" : "Freeze"}
+          {/* Action Buttons */}
+          <div className="flex flex-wrap gap-2.5 pt-4 border-t border-border">
+            {task.status === "todo" && !task.completed && (
+              <Button
+                size="sm"
+                className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-sm"
+                onClick={() => handleStart(task)}
+              >
+                <Sparkles className="w-4 h-4 mr-1.5" /> Start
+              </Button>
+            )}
+
+            {!task.completed && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="border-primary/40 hover:bg-primary/5"
+                onClick={() => handleStartFocus(task)}
+              >
+                <Lock className="w-4 h-4 mr-1.5" /> Lock In
+              </Button>
+            )}
+
+            {!task.completed && (
+              task.frozen ? (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="border-accent/50 bg-accent/10 text-accent hover:bg-accent/20"
+                  onClick={() => handleFreeze(task.id, false)}
+                >
+                  <Snowflake className="w-4 h-4 mr-1.5" /> Unfreeze
+                </Button>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  className="text-accent hover:bg-accent/10"
+                  onClick={() => handleFreeze(task.id, true)}
+                >
+                  <Snowflake className="w-4 h-4" />
+                </Button>
+              )
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    ))}
+
+    {/* Reminder Modal */}
+    <Dialog open={reminderModalOpen} onOpenChange={setReminderModalOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Set Reminder</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-4">
+          <Input
+            type="datetime-local"
+            value={reminderDate}
+            onChange={(e) => setReminderDate(e.target.value)}
+          />
+          <Button
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+            onClick={() => editingTask && setReminder(editingTask.id)}
+          >
+            Set Reminder
           </Button>
-              <Button variant="ghost" size="icon" onClick={() => editTask(task)}><Edit className="w-4 h-4" /></Button>
-              <Button variant="ghost" size="icon" onClick={() => setReminderModalOpen(true)}><Bell className="w-4 h-4" /></Button>
-              <Button variant="ghost" size="icon" onClick={() =>setShoppingModalOpen(true)}><DollarSign className="w-4 h-4" /></Button>
-              <Button variant="ghost" size="icon" className="text-destructive" onClick={() => deleteTask(task.id)}><Trash2 className="w-4 h-4" /></Button>
-            </div>
-          </CardContent>
-        </Card>
-      ))}
-             {/* Reminder Modal */}
-        <Dialog open={reminderModalOpen} onOpenChange={setReminderModalOpen}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Set Reminder</DialogTitle></DialogHeader>
-            <Input type="datetime-local" value={reminderDate} onChange={e => setReminderDate(e.target.value)} />
-            <Button onClick={() => setReminder(editingTask?.id || "")}>Set Reminder</Button>
-          </DialogContent>
-        </Dialog>
+        </div>
+      </DialogContent>
+    </Dialog>
 
-        {/* Shopping Modal */}
-        <Dialog open={shoppingModalOpen} onOpenChange={setShoppingModalOpen}>
-          <DialogContent>
-            <DialogHeader><DialogTitle>Add Cost to Shopping List</DialogTitle></DialogHeader>
-            <Input placeholder="Item name" value={shoppingName} onChange={e => setShoppingName(e.target.value)} />
-            <Input type="number" placeholder="Estimated cost" value={shoppingCost} onChange={e => setShoppingCost(e.target.value)} />
-            <Button onClick={() => addShoppingItem(editingTask?.id || "")}>Add to Shopping</Button>
-          </DialogContent>
-        </Dialog>
-
-                     <Dialog open={taskModalOpen} onOpenChange={setTaskModalOpen}>
-            
-                    <DialogContent className="max-w-2xl">
-                      <DialogHeader><DialogTitle>{editingTask ? "Edit Task" : "New Task"}</DialogTitle></DialogHeader>
-                      <div className="space-y-4">
-                        <Input placeholder="Task title..." value={title} onChange={e => setTitle(e.target.value)} />
-                        <Textarea placeholder="Description..." value={description} onChange={e => setDescription(e.target.value)} />
-                        <div className="grid grid-cols-2 gap-4">
-                          <Select value={priority} onValueChange={v => setPriority(v as any)}>
-                            <SelectTrigger><SelectValue placeholder="Priority" /></SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="low">Low</SelectItem>
-                              <SelectItem value="medium">Medium</SelectItem>
-                              <SelectItem value="high">High</SelectItem>
-                              <SelectItem value="urgent">Urgent</SelectItem>
-                            </SelectContent>
-                          </Select>
-                          <Select value={taskCategoryId} onValueChange={setTaskCategoryId}>
-                            <SelectTrigger><SelectValue placeholder="Category" /></SelectTrigger>
-                            <SelectContent>
-                              {categories.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Select value={preferredFocusMode} onValueChange={setPreferredFocusMode}>
-                          <SelectTrigger><SelectValue placeholder="Preferred Focus Mode" /></SelectTrigger>
-                          <SelectContent>
-                            {FOCUS_MODES.map(m => <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>)}
-                          </SelectContent>
-                        </Select>
-                        <Input type="datetime-local" value={dueDate} onChange={e => setDueDate(e.target.value)} />
-                        <Button onClick={saveTask} size="lg" className="w-full bg-green-600">{editingTask ? "Update" : "Create"} Task</Button>
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-</div>
-  )
-}
+    {/* Shopping Modal */}
+    <Dialog open={shoppingModalOpen} onOpenChange={setShoppingModalOpen}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Add Cost to Shopping List</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 pt-4">
+          <Input
+            placeholder="Item name"
+            value={shoppingName}
+            onChange={(e) => setShoppingName(e.target.value)}
+          />
+          <Input
+            type="number"
+            placeholder="Estimated cost"
+            value={shoppingCost}
+            onChange={(e) => setShoppingCost(e.target.value)}
+          />
+          <Button
+            className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+            onClick={() => editingTask && addShoppingItem(editingTask.id)}
+          >
+            Add to Shopping
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </div>
+)}

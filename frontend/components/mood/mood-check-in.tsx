@@ -4,6 +4,8 @@ import { useState } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
+import AuthService from "@/services/authService"
+import { toast } from "sonner"
 
 interface MoodOption {
   emoji: string
@@ -20,17 +22,59 @@ const moods: MoodOption[] = [
   { emoji: "😄", label: "Excellent", value: 5, color: "bg-blue-100 dark:bg-blue-900/30" },
 ]
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api"
+
 export default function MoodCheckIn() {
   const [selectedMood, setSelectedMood] = useState<number | null>(null)
+  const [SelectedLabel, setSelectedLabel] = useState<String | null>(null)
   const [notes, setNotes] = useState("")
+  const [saving, setSaving] = useState(false)
 
-  const handleCheckIn = () => {
-    if (selectedMood) {
-      console.log("Mood check-in:", { mood: selectedMood, notes })
-      setSelectedMood(null)
-      setNotes("")
+  const token = AuthService.getAccessToken()
+
+const handleCheckIn = async () => {
+  if (!selectedMood || !token) return;
+
+  // Find the selected mood object to get the label
+  const selectedMoodObj = moods.find(m => m.value === selectedMood);
+  if (!selectedMoodObj) return;
+
+  setSaving(true);
+  try {
+    const payload = {
+      mood: selectedMoodObj.label,    // ← Send the string label: "Good", "Stressed", etc.
+      rating: selectedMood,           // ← Send the number (1-5)
+      note: notes.trim() || "",       // ← Send empty string, not null
+    };
+
+    const res = await fetch(`${API_URL}/mood-logs/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    console.log("Response body:", data);
+
+    if (res.ok) {
+      toast.success("Mood logged successfully!");
+      setSelectedMood(null);
+      setNotes("");
+      window.dispatchEvent(new Event("mood-updated"));
+    } else {
+      toast.error("Failed to save mood");
+      console.error("Validation errors:", data);
     }
+  } catch (err) {
+    toast.error("Network error");
+    console.error(err);
+  } finally {
+    setSaving(false);
   }
+};
 
   return (
     <Card className="bg-white/60 dark:bg-slate-800/60 backdrop-blur border-primary/10">
@@ -41,22 +85,27 @@ export default function MoodCheckIn() {
             {moods.map((mood) => (
               <button
                 key={mood.value}
-                onClick={() => setSelectedMood(mood.value)}
+              onClick={() => {
+  setSelectedMood(mood.value)
+  setSelectedLabel(mood.label)
+}}
+
                 className={`flex flex-col items-center p-4 rounded-lg border-2 transition-all ${
                   selectedMood === mood.value
-                    ? `border-primary ${mood.color} scale-105`
+                
+                    ? `border-primary ${mood.color} scale-105 shadow-md`
                     : "border-transparent bg-muted/50 hover:bg-muted"
                 }`}
               >
                 <span className="text-4xl mb-2">{mood.emoji}</span>
-                <span className="text-xs font-semibold text-center">{mood.label}</span>
+                <span className="text-xs font-medium">{mood.label}</span>
               </button>
             ))}
           </div>
         </div>
 
         <div>
-          <label className="text-sm font-semibold mb-2 block">What's on your mind?</label>
+          <label className="text-sm font-medium mb-2 block">What's on your mind?</label>
           <Textarea
             placeholder="Add any notes about your mood (optional)..."
             value={notes}
@@ -67,22 +116,13 @@ export default function MoodCheckIn() {
 
         <Button
           onClick={handleCheckIn}
-          disabled={!selectedMood}
-          className="w-full bg-primary hover:bg-primary/90 disabled:opacity-50"
+          disabled={!selectedMood || saving}
+          className="w-full"
         >
-          Save Check-in
+          {saving ? "Saving..." : "Save Check-in"}
         </Button>
 
-        <div className="grid grid-cols-2 gap-3 text-sm">
-          <div className="p-3 bg-gradient-to-br from-primary/10 to-primary/5 rounded border border-primary/20">
-            <p className="text-muted-foreground mb-1">Check-ins Today</p>
-            <p className="text-2xl font-bold text-primary">3</p>
-          </div>
-          <div className="p-3 bg-gradient-to-br from-accent/10 to-accent/5 rounded border border-accent/20">
-            <p className="text-muted-foreground mb-1">Average Mood</p>
-            <p className="text-2xl font-bold text-accent">4.2</p>
-          </div>
-        </div>
+        {/* Optional: Show today's count (fetched in parent) */}
       </CardContent>
     </Card>
   )

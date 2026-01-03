@@ -181,9 +181,19 @@ class Hobby(models.Model):
     name = models.CharField(max_length=120)
     #schema = models.JSONField(default=dict, blank=True, help_text="Field definitions used for HobbyActivity.custom_data")
     description = models.CharField(max_length=300)
+    Note = models.CharField(max_length=300, blank=True)
+    frozen = models.BooleanField(default=False)
     def __str__(self):
         return f"{self.name} ({self.user})"
+    def freeze(self, reason: str = ""):
+        self.frozen = True
+        self.freeze_reason = reason
+        self.save()
 
+    def unfreeze(self):
+        self.frozen = False
+        self.freeze_reason = ""
+        self.save()
 
 class HobbyActivity(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="hobby_activities")
@@ -246,7 +256,10 @@ class MoodLog(models.Model):
     note = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
-
+# models.py - add to User via profile or settings
+class UserProfile(models.Model):  # Or extend User
+    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    salary_amount = models.DecimalField(max_digits=10, decimal_places=2, default=1200)  # Monthly DT
 # ---------- Shopping, expiration detection, and money tracking ----------
 class Category_items(models.Model):
     """

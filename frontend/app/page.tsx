@@ -1,9 +1,11 @@
 "use client"
-import Dashboard from "@/components/Dashboard"
+import Dashboard from "@/components/dashboard/Dashboard"
+import LandingPage from "@/components/landing-page"
 import SidebarLayout from "@/components/layout/sidebar-layout"
 import { Toaster } from "@/components/ui/toaster"
 import AuthService from "@/services/authService"
 import { motion } from "framer-motion"
+import { Rabbit } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 
@@ -15,36 +17,71 @@ export default function Home() {
   useEffect(() => {
     const checkAuth = async () => {
       const currentUser = await AuthService.getCurrentUser()
-      if (!currentUser) {
-        router.replace("/login?redirect=/dashboard")
-        return
-      }
       setUser(currentUser)
       setLoading(false)
     }
     checkAuth()
-  }, [router])
-    if (loading) {
+  }, [])
+
+  // Loading state
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-pink-100 via-purple-50 to-blue-50 flex items-center justify-center flex-col gap-8">
+      <div className="flex flex-col items-center justify-center min-h-screen space-y-6 text-center bg-background">
         <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 2, repeat: Infinity, ease: "linear" }}
-          className="text-9xl"
+          animate={{ y: [0, -6, 0] }}
+          transition={{
+            duration: 1.6,
+            repeat: Infinity,
+            ease: "easeInOut",
+          }}
+          className="p-2 rounded-full bg-accent/10"
         >
-          Bunny
+          <Rabbit className="w-10 h-10 text-accent" />
         </motion.div>
-        <p className="text-2xl font-bold text-pink-600 animate-pulse">Hopping you in safely...</p>
+
+        <div className="space-y-1">
+          <p className="text-lg font-medium text-foreground">
+            Getting things ready…
+          </p>
+          <p className="text-sm text-muted-foreground">
+            Just a tiny moment 🐾
+          </p>
+        </div>
+
+        <motion.div
+          className="flex gap-2 mt-2"
+          initial="hidden"
+          animate="visible"
+          variants={{
+            visible: {
+              transition: {
+                staggerChildren: 0.2,
+                repeat: Infinity,
+              },
+            },
+          }}
+        >
+          {[0, 1, 2].map((i) => (
+            <motion.span
+              key={i}
+              className="w-2 h-2 rounded-full bg-accent/60"
+              variants={{
+                hidden: { opacity: 0.3 },
+                visible: { opacity: 1 },
+              }}
+            />
+          ))}
+        </motion.div>
       </div>
     )
   }
 
-  if (!user) return null
+  // Always show LandingPage
+  // But pass user info so it can personalize (welcome + different button)
   return (
     <>
-<SidebarLayout>
-        <Dashboard />
-      </SidebarLayout>      <Toaster />
+      <LandingPage user={user} />
+      <Toaster />
     </>
   )
 }

@@ -29,7 +29,7 @@ export default function MoodTrackingView() {
         <div className="lg:col-span-1">
           <Card className="bg-gradient-to-br from-secondary/10 to-accent/10 border-secondary/20 sticky top-8">
             <CardHeader>
-              <CardTitle className="text-lg">Your Bunny</CardTitle>
+              <CardTitle className="text-lg">Your mood NOW</CardTitle>
             </CardHeader>
             <CardContent className="text-center">
               <div className="text-8xl mb-4">
@@ -39,40 +39,22 @@ export default function MoodTrackingView() {
                 {avatar.mood === "excited" && "🤩"}
                 {avatar.mood === "tired" && "😴"}
               </div>
-              <h3 className="font-bold text-lg mb-2">Bun Bun</h3>
-              <div className="space-y-2 text-sm">
-                <div className="px-2 py-1 bg-primary/10 text-primary rounded">Skin: {avatar.skin}</div>
-                <div className="px-2 py-1 bg-accent/10 text-accent rounded">Outfit: {avatar.outfit}</div>
-                {avatar.accessory !== "none" && (
-                  <div className="px-2 py-1 bg-secondary/10 text-secondary rounded">Accessory: {avatar.accessory}</div>
-                )}
-              </div>
+          
             </CardContent>
           </Card>
         </div>
 
         {/* Main Content */}
         <div className="lg:col-span-2">
-          <Tabs defaultValue="checkin" className="space-y-4">
-            <TabsList className="grid w-full grid-cols-3">
-              <TabsTrigger value="checkin">Check-in</TabsTrigger>
-              <TabsTrigger value="customize">Customize</TabsTrigger>
-              <TabsTrigger value="history">History</TabsTrigger>
-            </TabsList>
+     <Tabs defaultValue="checkin" className="space-y-4">
+  <TabsList className="grid w-full grid-cols-2">
+    <TabsTrigger value="checkin">Check-in</TabsTrigger>
+    <TabsTrigger value="history">History</TabsTrigger>
+  </TabsList>
 
-            <TabsContent value="checkin">
-              <MoodCheckIn />
-            </TabsContent>
-
-            <TabsContent value="customize">
-              <AvatarCustomizer avatar={avatar} setAvatar={setAvatar} />
-            </TabsContent>
-
-            <TabsContent value="history">
-              <MoodHistory />
-            </TabsContent>
-          </Tabs>
-
+  <TabsContent value="checkin"><MoodCheckIn /></TabsContent>
+  <TabsContent value="history"><MoodHistory /></TabsContent>
+</Tabs>
           {/* Insights */}
           <div className="mt-6">
             <MoodInsights />

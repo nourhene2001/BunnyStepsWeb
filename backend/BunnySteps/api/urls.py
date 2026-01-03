@@ -26,6 +26,7 @@ from .views import (
 
     HobbyListCreateView, HobbyDetailView,
     FreezeHobbyView,
+    ShoppingItemListView,
     TaskDetailView,
     TaskListCreateView, UnfreezeHobbyView,
     HobbyActivityListCreateView, ConvertHobbyActivityToTaskView,
@@ -42,7 +43,7 @@ router.register("hobbies", views.HobbyViewSet)
 router.register("hobby-activities", views.HobbyActivityViewSet)
 router.register("reminders", views.ReminderViewSet)
 router.register("notes", views.NoteViewSet)
-router.register("moods", views.MoodLogViewSet)
+router.register("mood-logs", views.MoodLogViewSet)
 router.register("shopping-items", views.ShoppingItemViewSet)
 router.register("expenses", views.ExpenseViewSet)
 router.register("badges", views.BadgeViewSet)
@@ -59,7 +60,8 @@ urlpatterns = [
     # HOBBIES
     path("hobbies/", HobbyListCreateView.as_view()),
     path("hobbies/<int:pk>/", HobbyDetailView.as_view()),
-
+    path('shopping-items/', ShoppingItemListView.as_view(), name='shopping-items'),
+    path('expenses/', ExpenseListCreateView.as_view(), name='expenses'),
     # FREEZE / UNFREEZE
     path("hobbies/<int:pk>/freeze/", FreezeHobbyView.as_view()),
     path("hobbies/<int:pk>/unfreeze/", UnfreezeHobbyView.as_view()),
