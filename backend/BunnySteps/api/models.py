@@ -355,8 +355,7 @@ from datetime import timedelta
 
 # Level up logic
 def level_up(summary: RewardSummary):
-    required_xp = summary.level * 1000
-
+    required_xp = 50
     if summary.xp >= required_xp:
         summary.xp -= required_xp   # ✅ subtract instead of double
         summary.level += 1

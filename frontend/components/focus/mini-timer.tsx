@@ -19,7 +19,7 @@ export default function MiniTimer() {
       intervalRef.current = setInterval(() => setTimeLeft(prev => prev - 1), 1000)
     } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false)
-      endSession(5)
+      endSession()
       setTimeLeft(5 * 60)
       if (soundEnabled) {
         new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj==")
@@ -48,7 +48,7 @@ export default function MiniTimer() {
   const resetTimer = async () => {
     if (currentSession) {
       const minutes = Math.floor((5 * 60 - timeLeft) / 60)
-      await endSession(minutes)
+      await endSession()
     }
     setTimeLeft(5 * 60)
     setIsRunning(false)
@@ -57,7 +57,7 @@ export default function MiniTimer() {
   const skipSession = async () => {
     if (currentSession) {
       const minutes = Math.floor((5 * 60 - timeLeft) / 60)
-      await endSession(minutes)
+      await endSession()
     }
     setTimeLeft(5 * 60)
     setIsRunning(false)

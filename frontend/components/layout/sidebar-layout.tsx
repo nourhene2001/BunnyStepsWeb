@@ -58,7 +58,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
   const [theme, setTheme] = useState<"light" | "dark">("light")
   const [language, setLanguage] = useState("English")
   const [user, setUser] = useState<{ username: string } | null>(null)
-
+  const API_URL = "http://localhost:8000/api"  // ← Hardcode this
   // Load user & notifications
   useEffect(() => {
     let isMounted = true
@@ -75,7 +75,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
       if (!token) return
 
       try {
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/notifications/`, {
+        const res = await fetch(`${API_URL}/notifications/`, {
           headers: { Authorization: `Bearer ${token}` }
         })
         if (res.ok && isMounted) {
@@ -112,7 +112,7 @@ export default function SidebarLayout({ children }: { children: React.ReactNode 
     if (!token) return
 
     try {
-      await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/notifications/${id}/`, {
+      await fetch(`${API_URL}/notifications/${id}/`, {
         method: "PATCH",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({ is_read: true })

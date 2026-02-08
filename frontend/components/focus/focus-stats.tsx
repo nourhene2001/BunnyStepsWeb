@@ -53,7 +53,7 @@ return (
                   borderRadius: "8px",
                 }}
               />
-              <Bar dataKey="sessions" fill="hsl(var(--primary))" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="sessions" fill="#662222" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         ) : (

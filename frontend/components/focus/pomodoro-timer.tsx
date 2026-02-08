@@ -21,7 +21,7 @@ export default function PomodoroTimer() {
       }, 1000)
     } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false)
-      endSession(25)
+      endSession()
       setTimeLeft(25 * 60)
       if (soundEnabled) {
         new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj==")
@@ -51,7 +51,7 @@ export default function PomodoroTimer() {
   const reset = async () => {
     if (currentSession) {
       const minutes = Math.floor((25 * 60 - timeLeft) / 60)
-      await endSession(minutes)
+      await endSession()
     }
     setTimeLeft(25 * 60)
     setIsRunning(false)

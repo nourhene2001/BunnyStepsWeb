@@ -52,7 +52,7 @@ export default function FlowTimer() {
   const resetTimer = async () => {
     if (currentSession) {
       const minutes = Math.floor(elapsedTime / 60)
-      await endSession(minutes)
+      await endSession()
     }
     setElapsedTime(0)
     setIsRunning(false)
@@ -61,7 +61,7 @@ export default function FlowTimer() {
   const endNow = async () => {
     if (currentSession) {
       const minutes = Math.floor(elapsedTime / 60)
-      await endSession(minutes)
+      await endSession()
     }
     setIsRunning(false)
   }

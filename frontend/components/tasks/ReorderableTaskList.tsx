@@ -77,6 +77,41 @@ function SortableTaskCard({
     transition,
     opacity: isDragging ? 0.5 : 1,
   }
+  const showFloatingXP = (amount: number = 50) => {
+  // Create the floating text element
+  const el = document.createElement("div")
+  el.innerText = `+${amount} XP`
+  el.style.position = "fixed"
+  el.style.left = "50%"
+  el.style.top = "60%"
+  el.style.transform = "translate(-50%, -50%)"
+  el.style.fontSize = "48px"
+  el.style.fontWeight = "bold"
+  el.style.color = "#facc15"
+  el.style.textShadow = "0 0 20px #fbbf24, 0 4px 8px rgba(0,0,0,0.4)"
+  el.style.pointerEvents = "none"
+  el.style.zIndex = "9999"
+  el.style.userSelect = "none"
+  el.style.opacity = "0"
+  el.style.transition = "all 1.2s cubic-bezier(0.22, 1, 0.36, 1)"
+
+  document.body.appendChild(el)
+
+  // Trigger animation
+  requestAnimationFrame(() => {
+    el.style.opacity = "1"
+    el.style.transform = "translate(-50%, -150%) scale(1.3)"
+    el.style.filter = "blur(0px)"
+  })
+
+  // Remove after animation
+  setTimeout(() => {
+    el.style.opacity = "0"
+    el.style.transform = "translate(-50%, -300%) scale(0.8)"
+    setTimeout(() => el.remove(), 600)
+  }, 800)
+}
+
 
   const getPriorityColor = (priority: string) => {
     const colors = {

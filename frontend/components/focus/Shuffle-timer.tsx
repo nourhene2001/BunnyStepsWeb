@@ -66,7 +66,7 @@ export default function ShuffleTimer() {
       intervalRef.current = setInterval(() => setTimeLeft(prev => prev - 1), 1000)
     } else if (timeLeft === 0 && isRunning) {
       setIsRunning(false)
-      endSession(60)
+      endSession()
       if (soundEnabled) {
         new Audio("data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAAB9AAACABAAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj==")
           .play()
@@ -102,7 +102,7 @@ export default function ShuffleTimer() {
   const resetTimer = async () => {
     if (currentSession) {
       const minutes = Math.floor((60 * 60 - timeLeft) / 60)
-      await endSession(minutes)
+      await endSession()
     }
     setTimeLeft(60 * 60)
     setIsRunning(false)

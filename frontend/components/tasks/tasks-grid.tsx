@@ -54,63 +54,65 @@ export default function TasksGrid({ status, tasks, categories, onRefresh }: Task
   }
 
 
+const showFloatingXP = (amount: number = 50) => {
+  // Create the floating text element
+  const el = document.createElement("div")
+  el.innerText = `+${amount} XP`
+  el.style.position = "fixed"
+  el.style.left = "50%"
+  el.style.top = "60%"
+  el.style.transform = "translate(-50%, -50%)"
+  el.style.fontSize = "48px"
+  el.style.fontWeight = "bold"
+  el.style.color = "#facc15"
+  el.style.textShadow = "0 0 20px #fbbf24, 0 4px 8px rgba(0,0,0,0.4)"
+  el.style.pointerEvents = "none"
+  el.style.zIndex = "9999"
+  el.style.userSelect = "none"
+  el.style.opacity = "0"
+  el.style.transition = "all 1.2s cubic-bezier(0.22, 1, 0.36, 1)"
+
+  document.body.appendChild(el)
+
+  // Trigger animation
+  requestAnimationFrame(() => {
+    el.style.opacity = "1"
+    el.style.transform = "translate(-50%, -150%) scale(1.3)"
+    el.style.filter = "blur(0px)"
+  })
+
+  // Remove after animation
+  setTimeout(() => {
+    el.style.opacity = "0"
+    el.style.transform = "translate(-50%, -300%) scale(0.8)"
+    setTimeout(() => el.remove(), 600)
+  }, 800)
+}
 const completeTask = async (id: string) => {
   try {
-    // Theme colors for confetti
-    const colors = ["#a78bfa", "#f472b6", "#34d399", "#60a5fa", "#facc15"]
+    // Show floating +50 XP text
+    showFloatingXP(50)
 
-    // Firework burst helper
-    const fireworkBurst = (x: number, y: number) => {
-      // Main confetti
-      confetti({
-        particleCount: 20,
-        spread: 100,
-        startVelocity: 30,
-        origin: { x, y },
-        colors,
-        gravity: 0.6,
-        scalar: 1.2,
-        ticks: 200,
-      })
+    // Optional: Add a small confetti burst (without text)
+    confetti({
+      particleCount: 40,
+      spread: 70,
+      origin: { x: 0.5, y: 0.7 },
+      colors: ["#facc15", "#fbbf24", "#f59e0b", "#a78bfa", "#f472b6"],
+      scalar: 0.8,
+    })
 
-      // Extra particles for variety
-      for (let i = 0; i < 5; i++) {
-        confetti({
-          particleCount: 1,
-          origin: { x, y },
-          colors: [colors[Math.floor(Math.random() * colors.length)]],
-          shapes: ["circle"], // ✅ allowed shape
-          gravity: 0.3,
-          drift: (Math.random() - 0.5) * 2,
-          startVelocity: 20 + Math.random() * 10,
-          decay: 0.95,
-          scalar: 1,
-        })
-      }
-    }
-
-    // Animate bursts for 1.5 seconds
-    const duration = 1500
-    const animationEnd = Date.now() + duration
-    const frame = () => {
-      const x = Math.random()
-      const y = Math.random() * 0.5 + 0.2
-      fireworkBurst(x, y)
-      if (Date.now() < animationEnd) requestAnimationFrame(frame)
-    }
-    frame()
-
-    // API call to complete task
+    // API call
     const res = await fetch(`${API_URL}/tasks/${id}/complete/`, {
       method: "PATCH",
       headers: { Authorization: `Bearer ${token}` },
     })
+
     if (!res.ok) throw new Error("Failed")
 
-    // Simple toast notification
-    toast.success("🎉 Amazing work! +XP & coins!", {
+    toast.success("Amazing work! +50 XP & +10 coins earned!", {
       icon: "🏆",
-      style: { transform: "scale(1.1)", transition: "transform 0.3s ease-in-out" },
+      duration: 4000,
     })
 
     onRefresh()
@@ -119,8 +121,6 @@ const completeTask = async (id: string) => {
     toast.error("Could not complete task")
   }
 }
-
-
   const deleteTask = async (id: string) => {
     if (!confirm("Delete forever?")) return
     await fetch(`${API_URL}/tasks/${id}/`, {
