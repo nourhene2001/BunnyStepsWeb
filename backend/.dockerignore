@@ -1,0 +1,14 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache
+.env
+node_modules
+.next
+dist
+build
+Dockerfile*
+docker-compose*
+nginx.conf

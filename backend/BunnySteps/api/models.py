@@ -330,7 +330,7 @@ class Expense(models.Model):
 # ---------- Badge (achievements) ----------
 class Badge(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="badges")
-    key = models.CharField(max_length=120, unique=True)  # e.g. "daily_3_tasks"
+    key = models.CharField(max_length=120)  # e.g. "daily_3_tasks"
     title = models.CharField(max_length=200)
     description = models.TextField(blank=True)
     earned_at = models.DateTimeField(auto_now_add=True)

@@ -1,0 +1,70 @@
+pipeline {
+    agent any  // Or 'docker { image "node:20-python:3.11" }' for containerized builds
+
+    tools {
+        nodejs "Node"  // From global tools config
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                git url: 'https://github.com/nourhene2001/BunnyStepsWeb', branch: 'main', credentialsId: 'gitlab-access-token'
+            }
+        }
+
+        stage('Backend: Install Dependencies') {
+            steps {
+                dir('backend') {
+                    bat 'python -m venv venv'
+                    bat '. venv/bin/activate && pip install -r requirements.txt'
+                }
+            }
+        }
+
+        stage('Backend: Run Tests') {
+            steps {
+                dir('backend') {
+                    bat '. venv/bin/activate && python manage.py test'
+                }
+            }
+            post {
+                always {
+                    junit '**/test-reports/*.xml'  // If you output XML test reports; configure Django to do this if needed
+                }
+            }
+        }
+
+        stage('Frontend: Install Dependencies') {
+            steps {
+                dir('frontend') {
+                    bat 'npm install'
+                }
+            }
+        }
+
+        stage('Frontend: Lint and Build') {
+            steps {
+                dir('frontend') {
+                    bat 'npm run lint'  // Optional linting
+                    bat 'npm run build'
+                }
+            }
+        }
+
+        stage('Deploy') {  // Optional: Add if you have a deployment target (e.g., Heroku, Vercel, or server)
+            when { branch 'main' }  // Only on main branch
+            steps {
+                echo 'Deploying to production...'  // Replace with actual deploy script, e.g., rsync or kubectl
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline succeeded!'
+        }
+        failure {
+            echo 'Pipeline failed!'
+        }
+    }
+}
