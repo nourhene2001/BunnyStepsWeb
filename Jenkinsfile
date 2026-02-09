@@ -19,6 +19,9 @@ pipeline {
                     args '-w /workspace'
                 }
             }
+            options {
+                customWorkspace '/workspace'
+            }
             steps {
                 dir('frontend') {
                     sh 'npm ci'
@@ -36,6 +39,9 @@ pipeline {
                     args '-w /workspace'
                 }
             }
+            options {
+                customWorkspace '/workspace'
+            }
             steps {
                 dir('backend') {
                     sh '''
@@ -51,10 +57,11 @@ pipeline {
             post {
                 always {
                     junit allowEmptyResults: true,
-                          testResults: 'backend/test-reports/results.xml'
+                        testResults: 'backend/test-reports/results.xml'
                 }
             }
         }
+
 
         stage('Build Production Images') {
             when { branch 'main' }
