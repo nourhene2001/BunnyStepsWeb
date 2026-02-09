@@ -1,13 +1,13 @@
 pipeline {
-    agent none  // Per-stage agents = best for mixed frontend/backend
+    agent any
 
     stages {
+
         stage('Checkout') {
-            agent any  // Quick checkout on host agent
             steps {
                 git url: 'https://github.com/nourhene2001/BunnyStepsWeb.git',
-                    branch: 'main',  
-                    credentialsId: 'gitlab-access-token'  
+                    branch: 'main',
+                    credentialsId: 'gitlab-access-token'
             }
         }
 
@@ -16,23 +16,24 @@ pipeline {
                 docker {
                     image 'bunny-ci:python-node'
                     reuseNode true
-                    args '-w /workspace -v "${WORKSPACE}":/workspace'
+                    args '-w /workspace'
                 }
             }
             steps {
                 dir('frontend') {
-                    sh 'npm ci'                    // Uses package-lock.json exactly
-                    sh 'npm run lint || true'      // Lint optional, don't fail build
+                    sh 'npm ci'
+                    sh 'npm run lint || true'
                     sh 'npm run build'
                 }
             }
         }
 
-        stage('Backend: Install & Test (with pytest)') {
+        stage('Backend: Install & Test') {
             agent {
                 docker {
                     image 'bunny-ci:python-node'
                     reuseNode true
+                    args '-w /workspace'
                 }
             }
             steps {
@@ -42,68 +43,39 @@ pipeline {
                         . venv/bin/activate
                         pip install --upgrade pip setuptools wheel
                         pip install -r requirements.txt
-                        # If pytest not in requirements.txt, install explicitly:
-                        # pip install pytest pytest-django
-                    '''
-
-                    // Create reports dir (optional – pytest will create it)
-                    sh 'mkdir -p test-reports'
-
-                    // Run pytest and generate JUnit XML
-                    sh '''
-                        . venv/bin/activate
+                        mkdir -p test-reports
                         pytest --junitxml=test-reports/results.xml
-                        # Add flags if needed, e.g.:
-                        # pytest -v --junitxml=test-reports/results.xml tests/
-                        # or pytest --ds=settings tests/
                     '''
                 }
             }
             post {
                 always {
-                    // Publish test results to Jenkins UI (graphs, trends, failed tests details)
                     junit allowEmptyResults: true,
                           testResults: 'backend/test-reports/results.xml'
                 }
             }
         }
 
-        stage('Build Production Images') {  // Optional but recommended for demo
+        stage('Build Production Images') {
             when { branch 'main' }
-            parallel {
-                stage('Build Frontend Image') {
-                    agent {
-                        docker { image 'bunny-ci:python-node'; reuseNode true }
-                    }
-                    steps {
-                        // Assumes frontend/Dockerfile exists; adjust path/filename if needed
-                        sh 'docker build -f frontend/Dockerfile.txt -t bunny-frontend:${BUILD_NUMBER} frontend'
-                    }
-                }
-
-                stage('Build Backend Image') {
-                    agent {
-                        docker { image 'bunny-ci:python-node'; reuseNode true }
-                    }
-                    steps {
-                        sh 'docker build -f backend/Dockerfile.txt -t bunny-backend:${BUILD_NUMBER} backend'
-                    }
-                }
+            agent any   // host (Windows)
+            steps {
+                bat 'docker build -f frontend/Dockerfile.txt -t bunny-frontend:%BUILD_NUMBER% frontend'
+                bat 'docker build -f backend/Dockerfile.txt -t bunny-backend:%BUILD_NUMBER% backend'
             }
         }
 
         stage('Deploy') {
             when { branch 'main' }
             steps {
-                echo 'Deploy placeholder: e.g. push images to Docker Hub / deploy to Render/Railway'
-                // Later: withDockerRegistry(...) { sh 'docker push ...' }
+                echo 'Deploy placeholder'
             }
         }
     }
 
     post {
-        success  { echo 'Pipeline succeeded! 🎉' }
-        failure  { echo 'Pipeline failed – check logs.' }
-        always   { cleanWs() }  // Clean workspace (optional)
+        success { echo 'Pipeline succeeded! 🎉' }
+        failure { echo 'Pipeline failed – check logs.' }
+        always  { cleanWs() }
     }
 }
