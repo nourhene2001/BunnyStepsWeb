@@ -15,12 +15,7 @@ pipeline {
             agent {
                 docker {
                     image 'bunny-ci:python-node'
-                    reuseNode true
-                    args '-w /workspace'
                 }
-            }
-            options {
-                ws('/workspace')
             }
             steps {
                 dir('frontend') {
@@ -35,12 +30,7 @@ pipeline {
             agent {
                 docker {
                     image 'bunny-ci:python-node'
-                    reuseNode true
-                    args '-w /workspace'
                 }
-            }
-            options {
-                ws('/workspace')
             }
             steps {
                 dir('backend') {
@@ -57,15 +47,14 @@ pipeline {
             post {
                 always {
                     junit allowEmptyResults: true,
-                        testResults: 'backend/test-reports/results.xml'
+                          testResults: 'backend/test-reports/results.xml'
                 }
             }
         }
 
-
         stage('Build Production Images') {
             when { branch 'main' }
-            agent any   // host (Windows)
+            agent any   // Windows host
             steps {
                 bat 'docker build -f frontend/Dockerfile.txt -t bunny-frontend:%BUILD_NUMBER% frontend'
                 bat 'docker build -f backend/Dockerfile.txt -t bunny-backend:%BUILD_NUMBER% backend'
