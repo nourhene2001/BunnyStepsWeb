@@ -14,8 +14,9 @@ pipeline {
         stage('Frontend: Install & Build') {
             agent {
                 docker {
-                    image 'bunny-ci:python-node'  // Your local image – works if Jenkins on same machine
-                    reuseNode true                // Reuse workspace → faster
+                    image 'bunny-ci:python-node'
+                    reuseNode true
+                    args '-w /workspace -v "${WORKSPACE}":/workspace'
                 }
             }
             steps {
