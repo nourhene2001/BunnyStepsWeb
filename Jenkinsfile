@@ -6,8 +6,8 @@ pipeline {
             agent any  // Quick checkout on host agent
             steps {
                 git url: 'https://github.com/nourhene2001/BunnyStepsWeb.git',
-                    branch: 'main',  // or 'master' if that's your default
-                    credentialsId: 'gitlab-access-token'  // ← MUST CHANGE THIS (from Manage Credentials)
+                    branch: 'main',  
+                    credentialsId: 'gitlab-access-token'  
             }
         }
 
