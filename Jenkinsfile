@@ -1,70 +1,116 @@
 pipeline {
-    agent any  // Or 'docker { image "node:20-python:3.11" }' for containerized builds
-
-    tools {
-        nodejs "Node"  // From global tools config
-    }
+    agent none  // we'll define agent per stage → best for mixed tech
 
     stages {
         stage('Checkout') {
+            agent any  // fast checkout on host
             steps {
-                git url: 'https://github.com/nourhene2001/BunnyStepsWeb', branch: 'main', credentialsId: 'gitlab-access-token'
-            } 
+                git url: 'https://github.com/nourhene2001/BunnyStepsWeb.git',
+                    branch: 'main',
+                    credentialsId: 'your-github-pat-id'  // ← CHANGE TO YOUR REAL CREDENTIAL ID (from earlier)
+            }
         }
 
-        stage('Backend: Install Dependencies') {
+        stage('Frontend: Install & Build') {
+            agent {
+                docker {
+                    image 'bunny-ci:python-node'  // or 'yourusername/bunny-ci:python-node' if pushed
+                    reuseNode true
+                }
+            }
             steps {
-                dir('backend') {
-                    bat 'python -m venv venv'
-                    bat '. venv/bin/activate && pip install -r requirements.txt'
+                dir('frontend') {
+                    sh 'npm ci'               // faster & reproducible
+                    sh 'npm run lint || true' // don't fail pipeline on lint warnings
+                    sh 'npm run build'
                 }
             }
         }
 
-        stage('Backend: Run Tests') {
+        stage('Backend: Install & Test') {
+            agent {
+                docker {
+                    image 'bunny-ci:python-node'
+                    reuseNode true
+                }
+            }
             steps {
                 dir('backend') {
-                    bat '. venv/bin/activate && python manage.py test'
+                    sh '''
+                        python -m venv venv
+                        . venv/bin/activate
+                        pip install --upgrade pip
+                        pip install -r requirements.txt
+                        # If you have requirements-dev.txt for testing extras:
+                        # pip install -r requirements-dev.txt
+                    '''
+                    
+                    // Run tests with JUnit XML output → important for Jenkins reporting
+                    sh '''
+                        . venv/bin/activate
+                        python manage.py test --junitxml=test-reports/results.xml
+                    '''
                 }
             }
             post {
                 always {
-                    junit '**/test-reports/*.xml'  // If you output XML test reports; configure Django to do this if needed
+                    junit allowEmptyResults: true,
+                          testResults: 'backend/test-reports/results.xml'
                 }
             }
         }
 
-        stage('Frontend: Install Dependencies') {
-            steps {
-                dir('frontend') {
-                    bat 'npm install'
+        stage('Build Production Images') {  // Optional – great for demo / future deploy
+            when { branch 'main' }
+            parallel {  // build both in parallel → faster
+                stage('Build Frontend Image') {
+                    agent {
+                        docker {
+                            image 'bunny-ci:python-node'
+                            reuseNode true
+                        }
+                    }
+                    steps {
+                        dir('frontend') {
+                            sh 'docker build -f ../Dockerfile.txt -t bunny-frontend:${BUILD_NUMBER} ..'  // adjust path if needed
+                        }
+                    }
+                }
+
+                stage('Build Backend Image') {
+                    agent {
+                        docker {
+                            image 'bunny-ci:python-node'
+                            reuseNode true
+                        }
+                    }
+                    steps {
+                        dir('backend') {
+                            sh 'docker build -f ../Dockerfile.txt -t bunny-backend:${BUILD_NUMBER} ..'
+                        }
+                    }
                 }
             }
         }
 
-        stage('Frontend: Lint and Build') {
+        stage('Deploy') {  // Placeholder – expand later
+            when { branch 'main' }
             steps {
-                dir('frontend') {
-                    bat 'npm run lint'  // Optional linting
-                    bat 'npm run build'
-                }
-            }
-        }
-
-        stage('Deploy') {  // Optional: Add if you have a deployment target (e.g., Heroku, Vercel, or server)
-            when { branch 'main' }  // Only on main branch
-            steps {
-                echo 'Deploying to production...'  // Replace with actual deploy script, e.g., rsync or kubectl
+                echo 'Deploy step placeholder → e.g. push images to registry, deploy to server / Render / Railway'
+                // Future: docker.withRegistry(...) { sh 'docker push ...' }
             }
         }
     }
 
     post {
         success {
-            echo 'Pipeline succeeded!'
+            echo 'Pipeline completed successfully! 🎉'
         }
         failure {
-            echo 'Pipeline failed!'
+            echo 'Pipeline failed – check the logs.'
+        }
+        always {
+            cleanWs()  // optional: clean workspace after build
         }
     }
 }
