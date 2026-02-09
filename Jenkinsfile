@@ -20,7 +20,7 @@ pipeline {
                 }
             }
             options {
-                customWorkspace '/workspace'
+                ws('/workspace')
             }
             steps {
                 dir('frontend') {
@@ -40,7 +40,7 @@ pipeline {
                 }
             }
             options {
-                customWorkspace '/workspace'
+                ws('/workspace')
             }
             steps {
                 dir('backend') {
