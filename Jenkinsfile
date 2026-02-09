@@ -1,33 +1,33 @@
 pipeline {
-    agent none  // we'll define agent per stage → best for mixed tech
+    agent none  // Per-stage agents = best for mixed frontend/backend
 
     stages {
         stage('Checkout') {
-            agent any  // fast checkout on host
+            agent any  // Quick checkout on host agent
             steps {
                 git url: 'https://github.com/nourhene2001/BunnyStepsWeb.git',
-                    branch: 'main',
-                    credentialsId: 'your-github-pat-id'  // ← CHANGE TO YOUR REAL CREDENTIAL ID (from earlier)
+                    branch: 'main',  // or 'master' if that's your default
+                    credentialsId: 'gitlab-access-token'  // ← MUST CHANGE THIS (from Manage Credentials)
             }
         }
 
         stage('Frontend: Install & Build') {
             agent {
                 docker {
-                    image 'bunny-ci:python-node'  // or 'yourusername/bunny-ci:python-node' if pushed
-                    reuseNode true
+                    image 'bunny-ci:python-node'  // Your local image – works if Jenkins on same machine
+                    reuseNode true                // Reuse workspace → faster
                 }
             }
             steps {
                 dir('frontend') {
-                    sh 'npm ci'               // faster & reproducible
-                    sh 'npm run lint || true' // don't fail pipeline on lint warnings
+                    sh 'npm ci'                    // Uses package-lock.json exactly
+                    sh 'npm run lint || true'      // Lint optional, don't fail build
                     sh 'npm run build'
                 }
             }
         }
 
-        stage('Backend: Install & Test') {
+        stage('Backend: Install & Test (with pytest)') {
             agent {
                 docker {
                     image 'bunny-ci:python-node'
@@ -39,78 +39,70 @@ pipeline {
                     sh '''
                         python -m venv venv
                         . venv/bin/activate
-                        pip install --upgrade pip
+                        pip install --upgrade pip setuptools wheel
                         pip install -r requirements.txt
-                        # If you have requirements-dev.txt for testing extras:
-                        # pip install -r requirements-dev.txt
+                        # If pytest not in requirements.txt, install explicitly:
+                        # pip install pytest pytest-django
                     '''
-                    
-                    // Run tests with JUnit XML output → important for Jenkins reporting
+
+                    // Create reports dir (optional – pytest will create it)
+                    sh 'mkdir -p test-reports'
+
+                    // Run pytest and generate JUnit XML
                     sh '''
                         . venv/bin/activate
-                        python manage.py test --junitxml=test-reports/results.xml
+                        pytest --junitxml=test-reports/results.xml
+                        # Add flags if needed, e.g.:
+                        # pytest -v --junitxml=test-reports/results.xml tests/
+                        # or pytest --ds=settings tests/
                     '''
                 }
             }
             post {
                 always {
+                    // Publish test results to Jenkins UI (graphs, trends, failed tests details)
                     junit allowEmptyResults: true,
                           testResults: 'backend/test-reports/results.xml'
                 }
             }
         }
 
-        stage('Build Production Images') {  // Optional – great for demo / future deploy
+        stage('Build Production Images') {  // Optional but recommended for demo
             when { branch 'main' }
-            parallel {  // build both in parallel → faster
+            parallel {
                 stage('Build Frontend Image') {
                     agent {
-                        docker {
-                            image 'bunny-ci:python-node'
-                            reuseNode true
-                        }
+                        docker { image 'bunny-ci:python-node'; reuseNode true }
                     }
                     steps {
-                        dir('frontend') {
-                            sh 'docker build -f ../Dockerfile.txt -t bunny-frontend:${BUILD_NUMBER} ..'  // adjust path if needed
-                        }
+                        // Assumes frontend/Dockerfile exists; adjust path/filename if needed
+                        sh 'docker build -f frontend/Dockerfile.txt -t bunny-frontend:${BUILD_NUMBER} frontend'
                     }
                 }
 
                 stage('Build Backend Image') {
                     agent {
-                        docker {
-                            image 'bunny-ci:python-node'
-                            reuseNode true
-                        }
+                        docker { image 'bunny-ci:python-node'; reuseNode true }
                     }
                     steps {
-                        dir('backend') {
-                            sh 'docker build -f ../Dockerfile.txt -t bunny-backend:${BUILD_NUMBER} ..'
-                        }
+                        sh 'docker build -f backend/Dockerfile.txt -t bunny-backend:${BUILD_NUMBER} backend'
                     }
                 }
             }
         }
 
-        stage('Deploy') {  // Placeholder – expand later
+        stage('Deploy') {
             when { branch 'main' }
             steps {
-                echo 'Deploy step placeholder → e.g. push images to registry, deploy to server / Render / Railway'
-                // Future: docker.withRegistry(...) { sh 'docker push ...' }
+                echo 'Deploy placeholder: e.g. push images to Docker Hub / deploy to Render/Railway'
+                // Later: withDockerRegistry(...) { sh 'docker push ...' }
             }
         }
     }
 
     post {
-        success {
-            echo 'Pipeline completed successfully! 🎉'
-        }
-        failure {
-            echo 'Pipeline failed – check the logs.'
-        }
-        always {
-            cleanWs()  // optional: clean workspace after build
-        }
+        success  { echo 'Pipeline succeeded! 🎉' }
+        failure  { echo 'Pipeline failed – check logs.' }
+        always   { cleanWs() }  // Clean workspace (optional)
     }
 }
