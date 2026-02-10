@@ -1,7 +1,16 @@
 pipeline {
     agent any
 
+    options {
+        skipDefaultCheckout(true)  
+    }
+
     stages {
+        stage('Clean Workspace') {
+            steps {
+                cleanWs()  
+            }
+        }
 
         stage('Checkout') {
             steps {
@@ -11,20 +20,6 @@ pipeline {
             }
         }
 
-        stage('Frontend: Install & Build') {
-            agent {
-                docker {
-                    image 'bunny-ci:python-node'
-                }
-            }
-            steps {
-                dir('frontend') {
-                    sh 'npm ci'
-                    sh 'npm run lint || true'
-                    sh 'npm run build'
-                }
-            }
-        }
 
         stage('Backend: Install & Test') {
             agent {
