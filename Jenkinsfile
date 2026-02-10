@@ -20,7 +20,7 @@ pipeline {
             }
         }
 
-
+        
         stage('Backend: Install & Test') {
             agent {
                 docker {
@@ -28,30 +28,31 @@ pipeline {
                 }
             }
             steps {
-                    sh '''
-                        # Debug: show where we start
-                        pwd
-                        ls -la
-            
-                        # Move into backend
-                        cd backend || { echo "ERROR: backend folder not found"; exit 1; }
-            
-                        # Confirm we are inside backend/
-                        pwd
-                        ls -la   # should list requirements.txt, manage.py, etc.
-            
-                        python -m venv venv
-                        . venv/bin/activate
-                        pip install --upgrade pip setuptools wheel
-                        pip install -r requirements.txt
-                        mkdir -p test-reports
-                        pytest --junitxml=test-reports/results.xml
-                    '''
-                }
+                sh '''
+                    # Debug: show workspace structure
+                    pwd
+                    ls -la
+                    ls -la backend || echo "backend not found"
+        
+                    # Correct path based on your GitHub structure
+                    cd backend/BunnySteps || { echo "ERROR: backend/BunnySteps not found"; exit 1; }
+        
+                    # Confirm location
+                    pwd
+                    ls -la   # should show manage.py, requirements.txt, tests/, etc.
+        
+                    python -m venv venv
+                    . venv/bin/activate
+                    pip install --upgrade pip setuptools wheel
+                    pip install -r requirements.txt
+                    mkdir -p test-reports
+                    pytest -v --junitxml=test-reports/results.xml   # -v = verbose, shows test names
+                '''
+            }
             post {
                 always {
                     junit allowEmptyResults: true,
-                          testResults: 'backend/test-reports/results.xml'
+                          testResults: 'backend/BunnySteps/test-reports/results.xml'
                 }
             }
         }
