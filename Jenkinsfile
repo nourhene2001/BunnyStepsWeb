@@ -30,6 +30,8 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
+                        pwd
+                        ls -la
                         python -m venv venv
                         . venv/bin/activate
                         pip install --upgrade pip setuptools wheel
