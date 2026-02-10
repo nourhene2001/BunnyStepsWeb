@@ -28,10 +28,18 @@ pipeline {
                 }
             }
             steps {
-                dir('backend') {
                     sh '''
+                        # Debug: show where we start
                         pwd
                         ls -la
+            
+                        # Move into backend
+                        cd backend || { echo "ERROR: backend folder not found"; exit 1; }
+            
+                        # Confirm we are inside backend/
+                        pwd
+                        ls -la   # should list requirements.txt, manage.py, etc.
+            
                         python -m venv venv
                         . venv/bin/activate
                         pip install --upgrade pip setuptools wheel
@@ -40,7 +48,6 @@ pipeline {
                         pytest --junitxml=test-reports/results.xml
                     '''
                 }
-            }
             post {
                 always {
                     junit allowEmptyResults: true,
