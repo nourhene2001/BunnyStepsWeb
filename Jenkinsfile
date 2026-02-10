@@ -34,7 +34,7 @@ pipeline {
                         ls -la
             
                         # Move into backend
-                        cd BunnySteps || { echo "ERROR: backend folder not found"; exit 1; }
+                        cd backend || { echo "ERROR: backend folder not found"; exit 1; }
             
                         # Confirm we are inside backend/
                         pwd
