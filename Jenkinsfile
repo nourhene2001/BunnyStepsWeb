@@ -14,7 +14,7 @@ pipeline {
 
         stage('Checkout') {
             steps {
-                git url: 'https://github.com/nourhene2001/BunnyStepsWeb/tree/main',
+                git url: 'https://github.com/nourhene2001/BunnyStepsWeb.git',
                     branch: 'main',
                     credentialsId: 'gitlab-access-token'  // ← change to your real GitHub credential ID
             }
