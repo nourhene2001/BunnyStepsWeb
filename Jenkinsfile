@@ -35,14 +35,12 @@ pipeline {
                     echo "=== Run ALL tests and generate HTML report ==="
                 
                     
-                    # Create test-reports folder
                     mkdir -p test-reports
                     
-                    # Run tests and generate HTML report using your style.css
                     pytest BunnySteps/Tests \
                         --tb=short \
                         --html=test-reports/report.html \
-                        --css=BunnySteps/style.css \
+                        --self-contained-html \
                         --metadata "Project" "BunnyStepsWeb" \
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
