@@ -1010,29 +1010,7 @@ class ImpulsiveShoppingItemView(generics.ListCreateAPIView):
             return Response({"warning": warning}, status=status.HTTP_400_BAD_REQUEST)
 
         serializer.save(user=user)
-import os
-from django.http import JsonResponse
-from rest_framework.decorators import api_view
-from dotenv import load_dotenv
-from openai import OpenAI
 
-load_dotenv()
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-@api_view(["POST"])
-def chat_with_bunny(request):
-    user_message = request.data.get("message", "")
-
-    completion = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[
-            {"role": "system", "content": "You are Bun Bun, a cute productivity bunny assistant. Be motivational, supportive and short."},
-            {"role": "user", "content": user_message},
-        ]
-    )
-
-    reply = completion.choices[0].message["content"]
-    return JsonResponse({"reply": reply})
 class UserProfileView(APIView):
     permission_classes = [IsAuthenticated]
 
