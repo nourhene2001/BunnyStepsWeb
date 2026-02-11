@@ -27,28 +27,32 @@ pipeline {
                     echo "=== Install dependencies ==="
                     pip install --upgrade pip
                     pip install -r requirements.txt
-                    pip install pytest pytest-html pytest-django allure-pytest allure-python-commons
+                    pip install pytest pytest-html pytest-django
 
                     echo "=== Create report folder ==="
                     mkdir -p test-reports
 
-                    echo "=== Run ALL tests ==="
+                    echo "=== Run ALL tests and generate HTML report ==="
                     pytest BunnySteps/Tests \
-                        -v \
                         --tb=short \
-                        --alluredir=test-reports/allure-results \
+                        --html=test-reports/report.html \
+                        --self-contained-html \
                         --junitxml=test-reports/results.xml || true
                 '''
             }
-        post {
-            always {
-                sh '''
-                    docker run --rm -v $PWD/backend/test-reports:/allure-results \
-                               -v $PWD/backend/allure-report:/allure-report \
-                               allure/allure:2.21.0 generate /allure-results -o /allure-report
-                '''
+            post {
+                always {
+                    // Publish HTML report in Jenkins
+                    publishHTML([
+                        allowMissing: false,
+                        alwaysLinkToLastBuild: true,
+                        keepAll: true,
+                        reportDir: 'backend/test-reports',
+                        reportFiles: 'report.html',
+                        reportName: 'Backend Test Report'
+                    ])
+                }
             }
-        }
         }
     }
 
