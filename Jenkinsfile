@@ -42,15 +42,11 @@ pipeline {
             }
             post {
                 always {
-                    // Publish HTML report in Jenkins
-                    publishHTML([
-                        allowMissing: false,
-                        alwaysLinkToLastBuild: true,
-                        keepAll: true,
-                        reportDir: 'backend/test-reports',
-                        reportFiles: 'report.html',
-                        reportName: 'Backend Test Report'
-                    ])
+                    // Archive the HTML report as a Jenkins artifact
+                    archiveArtifacts artifacts: 'backend/test-reports/report.html', fingerprint: true
+
+                    // Optional: archive the JUnit XML too
+                    junit allowEmptyResults: true, testResults: 'backend/test-reports/results.xml'
                 }
             }
         }
