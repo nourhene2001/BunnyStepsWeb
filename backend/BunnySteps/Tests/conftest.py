@@ -23,3 +23,20 @@ def authenticated_client(api_client):
     api_client.force_authenticate(user=user)
     api_client.user = user  # for easy access in tests
     return api_client
+    
+def pytest_html_report_title(report):
+    report.title = "BunnySteps Backend Test Report"
+
+def pytest_html_report_stylesheet():
+    # Inject your style.css into the HTML
+    try:
+        with open("BunnySteps/style.css") as f:
+            return f.read()
+    except Exception:
+        # Fallback styling if file missing
+        return """
+        body { font-family: Arial; background: #f8f8f8; }
+        table { border-collapse: collapse; width: 100%; }
+        tr.failed { background-color: #f8d7da; }
+        tr.passed { background-color: #d4edda; }
+        """
