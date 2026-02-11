@@ -33,17 +33,16 @@ pipeline {
                     mkdir -p test-reports
                     echo "=== Checking CSS file ==="
                     ls -la BunnySteps/style.css
-                    echo "=== Run ALL tests and generate HTML report ==="
-
-
                     pytest BunnySteps/Tests \
+                        -v \
                         --tb=short \
                         --html=test-reports/report.html \
-                        --css=BunnySteps/style.css \
+                        --self-contained-html \
                         --metadata "Project" "BunnyStepsWeb" \
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
                         --junitxml=test-reports/results.xml || true
+                    
 
                 '''
             }
