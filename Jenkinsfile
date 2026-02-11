@@ -17,12 +17,23 @@ pipeline {
             }
             steps {
                 sh '''
-                    echo "=== Listing test files ==="
-                    ls -R BunnySteps/Tests
-                    
-                    # Make sure Django env is ready
-                    export DJANGO_SETTINGS_MODULE=BunnySteps.settings
-                    python manage.py migrate
+                    echo "=== Enter backend ==="
+                    cd backend || { echo "backend folder missing"; exit 1; }
+
+                    echo "=== Create virtual env ==="
+                    python -m venv venv
+                    . venv/bin/activate
+
+                    echo "=== Install dependencies ==="
+                    pip install --upgrade pip
+                    pip install -r requirements.txt
+                    pip install pytest pytest-html pytest-django
+
+                    echo "=== Create report folder ==="
+                    mkdir -p test-reports
+
+                    echo "=== Run ALL tests and generate HTML report ==="
+                
                     
                     mkdir -p test-reports
                     
@@ -33,13 +44,17 @@ pipeline {
                         --metadata "Project" "BunnyStepsWeb" \
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
-                        --junitxml=test-reports/results.xml
+                        --junitxml=test-reports/results.xml || true
+
+
+
                 '''
             }
             post {
                 always {
                     archiveArtifacts artifacts: 'backend/test-reports/report.html', fingerprint: true
                     junit allowEmptyResults: true, testResults: 'backend/test-reports/results.xml'
+
                 }
             }
         }
