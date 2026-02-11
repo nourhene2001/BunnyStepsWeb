@@ -42,7 +42,6 @@ pipeline {
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
                         --junitxml=test-reports/results.xml || true
-
                 '''
             }
             post {
