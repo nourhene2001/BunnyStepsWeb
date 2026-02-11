@@ -33,6 +33,12 @@ pipeline {
                     mkdir -p test-reports
 
                     echo "=== Run ALL tests and generate HTML report ==="
+                    cd backend || { echo "backend folder missing"; exit 1; }
+                    
+                    # Create test-reports folder
+                    mkdir -p test-reports
+                    
+                    # Run tests and generate HTML report using your style.css
                     pytest BunnySteps/Tests \
                         --tb=short \
                         --html=test-reports/report.html \
@@ -41,6 +47,7 @@ pipeline {
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
                         --junitxml=test-reports/results.xml || true
+
 
 
                 '''
