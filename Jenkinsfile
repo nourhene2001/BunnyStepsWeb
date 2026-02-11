@@ -32,23 +32,23 @@ pipeline {
                     echo "=== Create report folder ==="
                     mkdir -p test-reports
 
-                    echo "=== Run ALL tests (unit + integration) ==="
+                    echo "=== Run ALL tests ==="
                     pytest BunnySteps/Tests \
-                        --junitxml=test-reports/results.xml \
+                        -v \
+                        --tb=short \
                         --html=test-reports/report.html \
                         --self-contained-html \
-                        --verbose \
-                        --tb=short \
-                        --showlocals || true
+                        --css=https://cdn.jsdelivr.net/npm/pytest-html@4.1.1/assets/style.css \
+                        --junitxml=test-reports/results.xml || true
                 '''
             }
             post {
                 always {
-                    // 1. Show JUnit results + trend graph in Jenkins UI
+                    // 1. JUnit trend graphs
                     junit allowEmptyResults: true,
                           testResults: 'backend/test-reports/results.xml'
 
-                    // 2. Publish the nice HTML report as a tab/link in the job page
+                    // 2. Publish nice HTML report as tab in Jenkins UI
                     publishHTML target: [
                         allowMissing:          false,
                         alwaysLinkToLastBuild: true,
@@ -59,7 +59,7 @@ pipeline {
                         reportTitles:          'Pytest Report - BunnySteps Backend'
                     ]
 
-                    // 3. Optional: Archive the HTML file so you can download it
+                    // 3. Archive for download
                     archiveArtifacts artifacts: 'backend/test-reports/report.html',
                                      fingerprint: true,
                                      allowEmptyArchive: true
