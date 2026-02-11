@@ -42,15 +42,11 @@ pipeline {
             }
         post {
             always {
-                // Force JAVA_HOME for Allure (Jenkins images usually have Java in /opt/java/openjdk)
-                withEnv(['JAVA_HOME=/opt/java/openjdk']) {
-                    junit allowEmptyResults: true,
-                          testResults: 'backend/test-reports/results.xml'
-        
-                    allure includeProperties: false,
-                           jdk: '',
-                           results: [[path: 'backend/test-reports/allure-results']]
-                }
+                sh '''
+                    docker run --rm -v $PWD/backend/test-reports:/allure-results \
+                               -v $PWD/backend/allure-report:/allure-report \
+                               allure/allure:2.21.0 generate /allure-results -o /allure-report
+                '''
             }
         }
         }
