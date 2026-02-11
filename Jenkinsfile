@@ -27,7 +27,7 @@ pipeline {
                     echo "=== Install dependencies ==="
                     pip install --upgrade pip
                     pip install -r requirements.txt
-                    pip install pytest pytest-html pytest-django
+                    pip install pytest pytest-html pytest-django allure-pytest allure-python-commons
 
                     echo "=== Create report folder ==="
                     mkdir -p test-reports
@@ -36,23 +36,24 @@ pipeline {
                     pytest BunnySteps/Tests \
                         -v \
                         --tb=short \
-                        --html=test-reports/report.html \
-                        --self-contained-html \
+                        --alluredir=test-reports/allure-results \
                         --junitxml=test-reports/results.xml || true
                 '''
             }
-        post {
-            always {
-                // Keep JUnit for trends/graphs
-                junit allowEmptyResults: true,
-                      testResults: 'backend/test-reports/results.xml'
-        
-                // Allure report generation
-                allure includeProperties: false,
-                       jdk: '',
-                       results: [[path: 'backend/test-reports/allure-results']]  // ← must match --alluredir path
+            post {
+                always {
+                    // 1. JUnit graphs + results in Jenkins UI
+                    junit allowEmptyResults: true,
+                          testResults: 'backend/test-reports/results.xml'
+
+                    // 2. Generate and show beautiful Allure report
+                    allure includeProperties: false,
+                           jdk: '',
+                           results: [[path: 'backend/test-reports/allure-results']]
+                }
             }
         }
+    }
 
     post {
         success { echo 'Pipeline succeeded! 🎉' }
