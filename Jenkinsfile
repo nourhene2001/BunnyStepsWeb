@@ -16,7 +16,7 @@ pipeline {
             steps {
                 git url: 'https://github.com/nourhene2001/BunnyStepsWeb.git',
                     branch: 'main',
-                    credentialsId: 'gitlab-access-token'  // or your new github-pat ID
+                    
             }
         }
 
