@@ -41,29 +41,16 @@ pipeline {
                         --junitxml=test-reports/results.xml || true
                 '''
             }
-            post {
-                always {
-                    // 1. JUnit trend graphs + failed test details in Jenkins UI
-                    junit allowEmptyResults: true,
-                          testResults: 'backend/test-reports/results.xml'
-
-                    // 2. Publish the nice HTML report as a tab/link in the job page
-                    publishHTML target: [
-                        allowMissing:          false,
-                        alwaysLinkToLastBuild: true,
-                        keepAll:               true,
-                        reportDir:             'backend/test-reports',
-                        reportFiles:           'report.html',
-                        reportName:            'Backend Tests Report',
-                        reportTitles:          'Pytest Report - BunnySteps Backend'
-                    ]
-
-                    // 3. Archive the HTML file so you can download it anytime
-                    archiveArtifacts artifacts: 'backend/test-reports/report.html',
-                                     fingerprint: true,
-                                     allowEmptyArchive: true
-                }
-            }
+        post {
+        always {
+            junit allowEmptyResults: true,
+                  testResults: 'backend/test-reports/results.xml'
+    
+            allure includeProperties: false,
+                   jdk: '',
+                   results: [[path: 'backend/test-reports/allure-results']]
+        }
+    }
         }
     }
 
