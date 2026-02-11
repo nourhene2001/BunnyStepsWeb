@@ -52,7 +52,7 @@ pipeline {
                            results: [[path: 'backend/test-reports/allure-results']]
                 }
             }
-
+        }
         }
     }
 
