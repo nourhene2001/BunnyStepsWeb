@@ -24,19 +24,17 @@ def authenticated_client(api_client):
     api_client.user = user  # for easy access in tests
     return api_client
     
-def pytest_html_report_title(report):
-    report.title = "BunnySteps Backend Test Report"
+import os
 
-def pytest_html_report_stylesheet():
-    # Inject your style.css into the HTML
-    try:
-        with open("BunnySteps/style.css") as f:
-            return f.read()
-    except Exception:
-        # Fallback styling if file missing
-        return """
-        body { font-family: Arial; background: #f8f8f8; }
-        table { border-collapse: collapse; width: 100%; }
-        tr.failed { background-color: #f8d7da; }
-        tr.passed { background-color: #d4edda; }
-        """
+def pytest_configure(config):
+    css_path = os.path.join(os.path.dirname(__file__), "..", "style.css")
+
+    if os.path.exists(css_path):
+        with open(css_path) as f:
+            extra_css = f.read()
+
+        config._metadata["Custom CSS Loaded"] = "Yes"
+
+        # Inject CSS into report
+        config.option.css = config.option.css or []
+        config.option.css.append(css_path)
