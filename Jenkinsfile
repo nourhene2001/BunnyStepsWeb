@@ -33,7 +33,7 @@ pipeline {
                     ls -la
 
                     # Move into backend folder (this is the fix)
-                    cd backend || { echo "ERROR: backend folder not found"; exit 1; }
+                    cd backend/BunnySteps || { echo "ERROR: backend/BunnySteps folder not found"; exit 1; }
 
                     # Confirm we are now inside backend/
                     pwd
