@@ -42,17 +42,17 @@ pipeline {
                 '''
             }
         post {
-        always {
-            junit allowEmptyResults: true,
-                  testResults: 'backend/test-reports/results.xml'
-    
-            allure includeProperties: false,
-                   jdk: '',
-                   results: [[path: 'backend/test-reports/allure-results']]
+            always {
+                // Keep JUnit for trends/graphs
+                junit allowEmptyResults: true,
+                      testResults: 'backend/test-reports/results.xml'
+        
+                // Allure report generation
+                allure includeProperties: false,
+                       jdk: '',
+                       results: [[path: 'backend/test-reports/allure-results']]  // ← must match --alluredir path
+            }
         }
-    }
-        }
-    }
 
     post {
         success { echo 'Pipeline succeeded! 🎉' }
