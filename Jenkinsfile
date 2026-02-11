@@ -31,9 +31,11 @@ pipeline {
 
                     echo "=== Create report folder ==="
                     mkdir -p test-reports
-
+                    echo "=== Checking CSS file ==="
+                    ls -la BunnySteps/style.css
                     echo "=== Run ALL tests and generate HTML report ==="
-                    
+
+
                     pytest BunnySteps/Tests \
                         --tb=short \
                         --html=test-reports/report.html \
