@@ -15,8 +15,8 @@ pipeline {
         stage('Checkout') {
             steps {
                 git url: 'https://github.com/nourhene2001/BunnyStepsWeb.git',
-                    branch: 'main',
-                    credentialsId: 'jenkins-ssh-github'
+                    branch: 'main'
+                    
                     
             }
         }
