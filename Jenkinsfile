@@ -19,36 +19,33 @@ pipeline {
                 sh '''
                     echo "=== Enter backend ==="
                     cd backend || { echo "backend folder missing"; exit 1; }
-
+        
                     echo "=== Create virtual env ==="
                     python -m venv venv
                     . venv/bin/activate
-
+        
                     echo "=== Install dependencies ==="
                     pip install --upgrade pip
                     pip install -r requirements.txt
                     pip install pytest pytest-html pytest-django
-
+        
                     echo "=== Create report folder ==="
                     mkdir -p test-reports
-
+        
                     echo "=== Run ALL tests ==="
                     pytest BunnySteps/Tests \
                         -v \
                         --tb=short \
                         --html=test-reports/report.html \
                         --self-contained-html \
-                        --css=https://cdn.jsdelivr.net/npm/pytest-html@4.1.1/assets/style.css \
                         --junitxml=test-reports/results.xml || true
                 '''
             }
             post {
                 always {
-                    // 1. JUnit trend graphs
                     junit allowEmptyResults: true,
                           testResults: 'backend/test-reports/results.xml'
-
-                    // 2. Publish nice HTML report as tab in Jenkins UI
+        
                     publishHTML target: [
                         allowMissing:          false,
                         alwaysLinkToLastBuild: true,
@@ -58,8 +55,7 @@ pipeline {
                         reportName:            'Backend Tests Report',
                         reportTitles:          'Pytest Report - BunnySteps Backend'
                     ]
-
-                    // 3. Archive for download
+        
                     archiveArtifacts artifacts: 'backend/test-reports/report.html',
                                      fingerprint: true,
                                      allowEmptyArchive: true
