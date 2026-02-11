@@ -36,7 +36,7 @@ pipeline {
                     pytest BunnySteps/Tests \
                         --tb=short \
                         --html=test-reports/report.html \
-                        --self-contained-html \
+                        --css=BunnySteps/style.css
                         --metadata "Project" "BunnyStepsWeb" \
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
