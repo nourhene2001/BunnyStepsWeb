@@ -52,11 +52,9 @@ pipeline {
             }
             post {
                 always {
-                    // Archive the HTML report as a Jenkins artifact
                     archiveArtifacts artifacts: 'backend/test-reports/report.html', fingerprint: true
-
-                    // Optional: archive the JUnit XML too
                     junit allowEmptyResults: true, testResults: 'backend/test-reports/results.xml'
+
                 }
             }
         }
