@@ -27,29 +27,34 @@ pipeline {
                     echo "=== Install dependencies ==="
                     pip install --upgrade pip
                     pip install -r requirements.txt
-                    pip install pytest pytest-html pytest-django
+                    pip install pytest pytest-html pytest-django allure-pytest
 
-                    echo "=== Create report folder ==="
-                    mkdir -p test-reports
-                    echo "=== Checking CSS file ==="
-                    ls -la BunnySteps/style.css
+                    echo "=== Create report folders ==="
+                    mkdir -p test-reports/allure-results
+                    mkdir -p test-reports/allure-report
+
+                    echo "=== Run tests with Allure ==="
                     pytest BunnySteps/Tests \
-                        -v \
-                        --tb=short \
-                        --html=test-reports/report.html \
-                        --metadata "Project" "BunnyStepsWeb" \
-                        --metadata "Build" "$BUILD_NUMBER" \
-                        --metadata "Branch" "$BRANCH_NAME" \
-                        --junitxml=test-reports/results.xml || true
-                    
-
+                        --alluredir=test-reports/allure-results \
+                        --junitxml=test-reports/results.xml \
+                        --tb=short || true
                 '''
             }
             post {
                 always {
-                    echo "=== Archiving reports ==="
-                    archiveArtifacts artifacts: 'backend/test-reports/report.html', fingerprint: true
+                    // Archive JUnit XML for Jenkins test results
                     junit allowEmptyResults: true, testResults: 'backend/test-reports/results.xml'
+
+                    // Generate Allure report inside container
+                    sh '''
+                        cd backend
+                        . venv/bin/activate
+                        allure generate test-reports/allure-results \
+                            -o test-reports/allure-report --clean || true
+                    '''
+
+                    // Archive the full Allure HTML report
+                    archiveArtifacts artifacts: 'backend/test-reports/allure-report/**', fingerprint: true, allowEmptyArchive: true
                 }
             }
         }
