@@ -33,7 +33,7 @@ pipeline {
                     mkdir -p test-reports
 
                     echo "=== Run ALL tests and generate HTML report ==="
-                    cd backend || { echo "backend folder missing"; exit 1; }
+                
                     
                     # Create test-reports folder
                     mkdir -p test-reports
