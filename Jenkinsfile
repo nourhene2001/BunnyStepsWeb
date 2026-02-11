@@ -33,14 +33,16 @@ pipeline {
                     mkdir -p test-reports
 
                     echo "=== Run ALL tests and generate HTML report ==="
+                    
                     pytest BunnySteps/Tests \
                         --tb=short \
                         --html=test-reports/report.html \
-                        --css=BunnySteps/style.css
+                        --css=BunnySteps/style.css \
                         --metadata "Project" "BunnyStepsWeb" \
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
                         --junitxml=test-reports/results.xml || true
+
                 '''
             }
             post {
