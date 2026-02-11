@@ -37,7 +37,6 @@ pipeline {
                         -v \
                         --tb=short \
                         --html=test-reports/report.html \
-                        --self-contained-html \
                         --metadata "Project" "BunnyStepsWeb" \
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
