@@ -33,10 +33,6 @@ pipeline {
                     mkdir -p test-reports
 
                     echo "=== Run ALL tests and generate HTML report ==="
-                
-                    
-                    mkdir -p test-reports
-                    
                     pytest BunnySteps/Tests \
                         --tb=short \
                         --html=test-reports/report.html \
@@ -45,16 +41,12 @@ pipeline {
                         --metadata "Build" "$BUILD_NUMBER" \
                         --metadata "Branch" "$BRANCH_NAME" \
                         --junitxml=test-reports/results.xml || true
-
-
-
                 '''
             }
             post {
                 always {
                     archiveArtifacts artifacts: 'backend/test-reports/report.html', fingerprint: true
                     junit allowEmptyResults: true, testResults: 'backend/test-reports/results.xml'
-
                 }
             }
         }
