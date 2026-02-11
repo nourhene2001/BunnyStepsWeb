@@ -40,18 +40,19 @@ pipeline {
                         --junitxml=test-reports/results.xml || true
                 '''
             }
-            post {
-                always {
-                    // 1. JUnit graphs + results in Jenkins UI
+        post {
+            always {
+                // Force JAVA_HOME for Allure (Jenkins images usually have Java in /opt/java/openjdk)
+                withEnv(['JAVA_HOME=/opt/java/openjdk']) {
                     junit allowEmptyResults: true,
                           testResults: 'backend/test-reports/results.xml'
-
-                    // 2. Generate and show beautiful Allure report
+        
                     allure includeProperties: false,
                            jdk: '',
                            results: [[path: 'backend/test-reports/allure-results']]
                 }
             }
+
         }
     }
 
