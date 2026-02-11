@@ -31,7 +31,6 @@ pipeline {
 
                     echo "=== Create report folders ==="
                     mkdir -p test-reports/allure-results
-                    mkdir -p test-reports/allure-report
 
                     echo "=== Run tests with Allure ==="
                     pytest BunnySteps/Tests \
@@ -42,18 +41,19 @@ pipeline {
             }
             post {
                 always {
-                    // Archive JUnit XML for Jenkins test results
+                    // Archive JUnit XML for test results
                     junit allowEmptyResults: true, testResults: 'backend/test-reports/results.xml'
 
-                    // Generate Allure report inside container
-                    sh '''
-                        cd backend
-                        . venv/bin/activate
-                        allure generate test-reports/allure-results \
-                            -o test-reports/allure-report --clean || true
-                    '''
+                    // Publish Allure report (this is the key part)
+                    allure(
+                        includeProperties: false,
+                        jdk: '',
+                        properties: [],
+                        reportBuildPolicy: 'ALWAYS',
+                        results: [[path: 'backend/test-reports/allure-results']]
+                    )
 
-                    // Archive the full Allure HTML report
+                    // Optional: archive generated HTML too
                     archiveArtifacts artifacts: 'backend/test-reports/allure-report/**', fingerprint: true, allowEmptyArchive: true
                 }
             }
