@@ -19,19 +19,19 @@ pipeline {
                 sh '''
                     echo "=== Enter backend ==="
                     cd backend || { echo "backend folder missing"; exit 1; }
-        
+
                     echo "=== Create virtual env ==="
                     python -m venv venv
                     . venv/bin/activate
-        
+
                     echo "=== Install dependencies ==="
                     pip install --upgrade pip
                     pip install -r requirements.txt
                     pip install pytest pytest-html pytest-django
-        
+
                     echo "=== Create report folder ==="
                     mkdir -p test-reports
-        
+
                     echo "=== Run ALL tests ==="
                     pytest BunnySteps/Tests \
                         -v \
@@ -43,9 +43,11 @@ pipeline {
             }
             post {
                 always {
+                    // 1. JUnit trend graphs + failed test details in Jenkins UI
                     junit allowEmptyResults: true,
                           testResults: 'backend/test-reports/results.xml'
-        
+
+                    // 2. Publish the nice HTML report as a tab/link in the job page
                     publishHTML target: [
                         allowMissing:          false,
                         alwaysLinkToLastBuild: true,
@@ -55,7 +57,8 @@ pipeline {
                         reportName:            'Backend Tests Report',
                         reportTitles:          'Pytest Report - BunnySteps Backend'
                     ]
-        
+
+                    // 3. Archive the HTML file so you can download it anytime
                     archiveArtifacts artifacts: 'backend/test-reports/report.html',
                                      fingerprint: true,
                                      allowEmptyArchive: true
