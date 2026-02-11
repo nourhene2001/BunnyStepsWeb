@@ -6,4 +6,5 @@ pytest
 pytest-django          
 pytest-html     
 djangorestframework
+corsheaders
 
