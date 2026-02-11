@@ -33,7 +33,7 @@ from .views import (
     HobbyNoteListCreateView, NoteDeleteView,
     CheckInactivityRemindersView,
     UserProfileView,
-    chat_with_bunny)
+    )
 
 router = DefaultRouter()
 router.register("categories", views.CategoryViewSet)
@@ -98,7 +98,6 @@ urlpatterns = [
     path('login/', views.LoginView.as_view(), name='login'),
     path('logout/', views.LogoutView.as_view(), name='logout'),
     path("auth/me/", UserProfileView.as_view(), name="user-profile"),
-    path("chat/", chat_with_bunny),
     path('profile/', UserProfileView.as_view(), name='profile'),
     path('reward-recommendations/', RewardRecommendationView.as_view(), name='recommendations'),
     path('expiring-items/', ExpiringItemsView.as_view(), name='expiring-items'),
